@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../../features/document_result/view/document_result_screen.dart';
+import '../../features/generation/generation_request_args.dart';
 import '../../features/generation/view/generation_config_screen.dart';
 import '../../features/generation/view/generation_progress_screen.dart';
 import '../../features/history/view/history_screen.dart';
@@ -25,7 +26,8 @@ class AppRouter {
       ),
       GoRoute(
         path: '/note/progress',
-        builder: (context, state) => const GenerationProgressScreen(),
+        builder: (context, state) =>
+            GenerationProgressScreen(args: state.extra as GenerationRequestArgs?),
       ),
       GoRoute(
         path: '/document/:id',
