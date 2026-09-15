@@ -7,6 +7,7 @@ import '../../features/history/view/history_screen.dart';
 import '../../features/home/view/home_screen.dart';
 import '../../features/note_editor/view/note_editor_screen.dart';
 import '../../features/settings/view/settings_screen.dart';
+import '../../models/note.dart';
 
 class AppRouter {
   static final router = GoRouter(
@@ -19,7 +20,8 @@ class AppRouter {
       ),
       GoRoute(
         path: '/note/config',
-        builder: (context, state) => const GenerationConfigScreen(),
+        builder: (context, state) =>
+            GenerationConfigScreen(note: state.extra as Note?),
       ),
       GoRoute(
         path: '/note/progress',
