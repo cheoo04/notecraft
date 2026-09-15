@@ -1,30 +1,34 @@
 from fastapi import APIRouter
 
-from services import ai_client, sketch_interpreter, transcription
+from models.schemas import GenerateRequest, GenerateResponse
+from services import ai_client
+from services.prompts import fiche_cornell, rapport, resume
 
 router = APIRouter()
 
+_PROMPT_BUILDERS = {
+    "resume": resume.build_prompt,
+    "rapport": rapport.build_prompt,
+    "fiche_de_revision": fiche_cornell.build_prompt,
+    # TODO: formats "expose" et "plan_de_cours" pas encore couverts,
+    # on retombe sur le résumé en attendant leurs prompts dédiés
+}
 
-@router.post("/")
-def generate_document(note_id: str, format: str, mode: str):
+
+@router.post("/", response_model=GenerateResponse)
+def generate_document(request: GenerateRequest):
     """
-    Point d'entrée principal : reçoit une note, un format de sortie
-    et un mode (express/affine), et retourne le document généré.
+    Reçoit le contenu d'une note, un format de sortie et un mode, et
+    retourne le document généré.
 
-    - mode == "express" : une seule passe de génération, réponse rapide
-    - mode == "affine"  : transcription + vectorisation des schémas +
-                          plusieurs passes de génération/vérification,
-                          traitement différé avec notification à la fin
+    V1 : traitement synchrone dans les deux modes (le mode affiné prend
+    juste plus de temps à répondre). Le vrai traitement en arrière-plan
+    avec notification viendra une fois ce flux de base validé.
     """
-    # TODO:
-    # 1. si audio présent -> transcription.transcribe(audio_path)
-    # 2. si esquisse présente -> sketch_interpreter.interpret(strokes)
-    # 3. assembler le prompt selon `format` (voir services/prompts/)
-    # 4. appeler ai_client.generate(prompt, mode)
-    raise NotImplementedError
+    note_content = f"{request.note_title}\n\n{request.note_content}"
+    build_prompt = _PROMPT_BUILDERS.get(request.format.value, resume.build_prompt)
 
+    prompt = build_prompt(note_content)
+    content = ai_client.generate(prompt, request.mode.value)
 
-@router.get("/{document_id}/status")
-def get_generation_status(document_id: str):
-    # TODO: statut d'une génération en mode affiné (en_cours/pret/echec)
-    raise NotImplementedError
+    return GenerateResponse(document_id="local", status="pret", content=content)

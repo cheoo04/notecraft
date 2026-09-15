@@ -17,7 +17,8 @@ class GenerationMode(str, Enum):
 
 
 class GenerateRequest(BaseModel):
-    note_id: str
+    note_title: str
+    note_content: str
     format: DocumentFormat
     mode: GenerationMode
 

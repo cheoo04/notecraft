@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
 
+import '../../../models/document.dart';
+
 /// Écran 5 — Résultat généré & export.
-/// TODO: aperçu du document (texte + schémas SVG nettoyés),
-/// édition WYSIWYG, export PDF/Word/SVG.
+/// TODO: édition, export PDF/Word/SVG, rendu des schémas nettoyés.
 class DocumentResultScreen extends StatelessWidget {
-  const DocumentResultScreen({super.key});
+  final GeneratedDocument? document;
+
+  const DocumentResultScreen({super.key, this.document});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Document généré')),
-      body: const Center(child: Text('TODO: aperçu du document + export')),
+      body: document?.content == null
+          ? const Center(child: Text('Aucun document reçu'))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(document!.content!),
+            ),
     );
   }
 }

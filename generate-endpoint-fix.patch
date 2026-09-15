@@ -1,0 +1,246 @@
+diff --git a/backend/models/schemas.py b/backend/models/schemas.py
+index da9adee..aadfd5c 100644
+--- a/backend/models/schemas.py
++++ b/backend/models/schemas.py
+@@ -17,7 +17,8 @@ class GenerationMode(str, Enum):
+ 
+ 
+ class GenerateRequest(BaseModel):
+-    note_id: str
++    note_title: str
++    note_content: str
+     format: DocumentFormat
+     mode: GenerationMode
+ 
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 16ad050..20a9736 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -3,3 +3,4 @@ uvicorn[standard]>=0.30.0
+ pydantic>=2.7.0
+ python-docx>=1.1.2
+ anthropic>=0.34.0
++httpx>=0.27.0
+diff --git a/backend/routes/generate.py b/backend/routes/generate.py
+index 4894711..1e101ef 100644
+--- a/backend/routes/generate.py
++++ b/backend/routes/generate.py
+@@ -1,30 +1,43 @@
++import uuid
++
+ from fastapi import APIRouter
+ 
+-from services import ai_client, sketch_interpreter, transcription
++from models.schemas import GenerateRequest, GenerateResponse
++from services import ai_client
++from services.prompts import build_prompt
+ 
+ router = APIRouter()
+ 
+ 
+-@router.post("/")
+-def generate_document(note_id: str, format: str, mode: str):
++@router.post("/", response_model=GenerateResponse)
++def generate_document(payload: GenerateRequest) -> GenerateResponse:
+     """
+-    Point d'entrée principal : reçoit une note, un format de sortie
+-    et un mode (express/affine), et retourne le document généré.
++    Point d'entrée principal : reçoit le contenu d'une note (titre +
++    corps) et un format de sortie, et retourne le document généré.
+ 
+     - mode == "express" : une seule passe de génération, réponse rapide
+-    - mode == "affine"  : transcription + vectorisation des schémas +
+-                          plusieurs passes de génération/vérification,
+-                          traitement différé avec notification à la fin
++    - mode == "affine"  : brouillon puis relecture/correction de style,
++                          toujours synchrone (voir services/ai_client.py)
++
++    Le backend reste sans état : le contenu de la note est envoyé
++    directement dans la requête, il n'y a pas de note_id ni de stockage
++    côté serveur pour l'instant (à ajouter plus tard, ex. Supabase, si
++    on veut un historique des notes/documents).
+     """
+-    # TODO:
+-    # 1. si audio présent -> transcription.transcribe(audio_path)
+-    # 2. si esquisse présente -> sketch_interpreter.interpret(strokes)
+-    # 3. assembler le prompt selon `format` (voir services/prompts/)
+-    # 4. appeler ai_client.generate(prompt, mode)
+-    raise NotImplementedError
++    full_note = f"Titre : {payload.note_title}\n\n{payload.note_content}"
++    prompt = build_prompt(payload.format, full_note)
++    content = ai_client.generate(prompt, payload.mode)
++
++    return GenerateResponse(
++        document_id=str(uuid.uuid4()),
++        status="pret",
++        content=content,
++    )
+ 
+ 
+ @router.get("/{document_id}/status")
+ def get_generation_status(document_id: str):
+-    # TODO: statut d'une génération en mode affiné (en_cours/pret/echec)
++    # TODO: utile seulement si on passe un jour à un vrai traitement
++    # asynchrone (file d'attente + webhook) ; pas nécessaire tant que
++    # /generate/ reste synchrone comme ci-dessus.
+     raise NotImplementedError
+diff --git a/backend/services/ai_client.py b/backend/services/ai_client.py
+index d2364ac..1e74848 100644
+--- a/backend/services/ai_client.py
++++ b/backend/services/ai_client.py
+@@ -5,13 +5,85 @@ Centraliser l'appel ici permet, plus tard, de remplacer l'API externe
+ par un modèle auto-hébergé (fine-tuné en LoRA/QLoRA, servi via
+ llama.cpp/Ollama) sans changer les routes ni le code Flutter :
+ seule cette fonction change.
++
++Fournisseur choisi via la variable d'environnement AI_PROVIDER
++("groq" par défaut, ou "anthropic").
++"""
++
++import os
++
++import httpx
++
++GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
++GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
++ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-6"
++
++Message = dict[str, str]
++
++
++def _call_groq(messages: list[Message]) -> str:
++    api_key = os.environ["GROQ_API_KEY"]
++    model = os.environ.get("GROQ_MODEL", GROQ_DEFAULT_MODEL)
++
++    response = httpx.post(
++        GROQ_API_URL,
++        headers={"Authorization": f"Bearer {api_key}"},
++        json={"model": model, "messages": messages, "temperature": 0.7},
++        timeout=55.0,
++    )
++    response.raise_for_status()
++    return response.json()["choices"][0]["message"]["content"]
++
++
++def _call_anthropic(messages: list[Message]) -> str:
++    import anthropic
++
++    client = anthropic.Anthropic()  # lit ANTHROPIC_API_KEY dans l'environnement
++    model = os.environ.get("ANTHROPIC_MODEL", ANTHROPIC_DEFAULT_MODEL)
++
++    response = client.messages.create(
++        model=model,
++        max_tokens=4096,
++        messages=messages,
++    )
++    return "".join(block.text for block in response.content if block.type == "text")
++
++
++def _call(messages: list[Message]) -> str:
++    provider = os.environ.get("AI_PROVIDER", "groq")
++    if provider == "groq":
++        return _call_groq(messages)
++    if provider == "anthropic":
++        return _call_anthropic(messages)
++    raise ValueError(f"AI_PROVIDER inconnu : {provider!r}")
++
++
++_REVIEW_INSTRUCTIONS = """
++Voici un premier brouillon de document. Relis-le et corrige-le pour :
++- respecter strictement les consignes de style données au premier tour
++  (pas de tiret cadratin, pas de sur-listage, ton naturel non robotique)
++- améliorer la clarté, la cohérence et enchaîner mieux les idées
++- corriger les répétitions ou lourdeurs de style
++
++Ne fais aucun commentaire ni introduction, renvoie uniquement la version
++corrigée du document.
++
++Brouillon :
++{draft}
+ """
+ 
+ 
+ def generate(prompt: str, mode: str) -> str:
+-    # TODO:
+-    # mode == "express" : un seul appel, réponse courte attendue
+-    # mode == "affine"  : plusieurs passes (brouillon -> relecture ->
+-    #                     vérification du style "non-IA", voir section 5.3
+-    #                     du cahier des charges)
+-    raise NotImplementedError
++    if mode == "express":
++        # Une seule passe de génération, réponse rapide.
++        return _call([{"role": "user", "content": prompt}])
++
++    if mode == "affine":
++        # Brouillon puis relecture/correction de style. Reste synchrone :
++        # avec Groq, les deux appels tiennent largement dans les 60s
++        # configurés côté Vercel (voir section 5.3 du cahier des charges).
++        draft = _call([{"role": "user", "content": prompt}])
++        review_prompt = _REVIEW_INSTRUCTIONS.format(draft=draft)
++        return _call([{"role": "user", "content": review_prompt}])
++
++    raise ValueError(f"mode inconnu : {mode!r}")
+diff --git a/backend/services/prompts/__init__.py b/backend/services/prompts/__init__.py
+new file mode 100644
+index 0000000..ca4f4c1
+--- /dev/null
++++ b/backend/services/prompts/__init__.py
+@@ -0,0 +1,18 @@
++from models.schemas import DocumentFormat
++
++from . import expose, fiche_cornell, plan_de_cours, rapport, resume
++
++# Associe chaque format de sortie au module qui construit son prompt.
++# fiche_de_revision -> fiche_cornell : c'est la méthode Cornell qui est
++# utilisée pour ce format, d'où le nom de module différent.
++_BUILDERS = {
++    DocumentFormat.resume: resume.build_prompt,
++    DocumentFormat.rapport: rapport.build_prompt,
++    DocumentFormat.expose: expose.build_prompt,
++    DocumentFormat.plan_de_cours: plan_de_cours.build_prompt,
++    DocumentFormat.fiche_de_revision: fiche_cornell.build_prompt,
++}
++
++
++def build_prompt(format: DocumentFormat, note_content: str) -> str:
++    return _BUILDERS[format](note_content)
+diff --git a/backend/services/prompts/expose.py b/backend/services/prompts/expose.py
+new file mode 100644
+index 0000000..acfdda4
+--- /dev/null
++++ b/backend/services/prompts/expose.py
+@@ -0,0 +1,14 @@
++from .style_guide import STYLE_GUIDE
++
++
++def build_prompt(note_content: str) -> str:
++    return f"""
++Transforme la note suivante en plan d'exposé oral (accroche, annonce du
++plan, développement en 2 ou 3 parties avec sous-parties, conclusion avec
++ouverture).
++
++{STYLE_GUIDE}
++
++Note d'origine :
++{note_content}
++"""
+diff --git a/backend/services/prompts/plan_de_cours.py b/backend/services/prompts/plan_de_cours.py
+new file mode 100644
+index 0000000..fab92bb
+--- /dev/null
++++ b/backend/services/prompts/plan_de_cours.py
+@@ -0,0 +1,14 @@
++from .style_guide import STYLE_GUIDE
++
++
++def build_prompt(note_content: str) -> str:
++    return f"""
++Transforme la note suivante en plan de cours structuré : objectifs
++pédagogiques, découpage en chapitres/séances, points clés à retenir pour
++chaque partie.
++
++{STYLE_GUIDE}
++
++Note d'origine :
++{note_content}
++"""

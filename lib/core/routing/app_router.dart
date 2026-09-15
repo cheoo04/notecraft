@@ -8,6 +8,7 @@ import '../../features/history/view/history_screen.dart';
 import '../../features/home/view/home_screen.dart';
 import '../../features/note_editor/view/note_editor_screen.dart';
 import '../../features/settings/view/settings_screen.dart';
+import '../../models/document.dart';
 import '../../models/note.dart';
 
 class AppRouter {
@@ -31,7 +32,8 @@ class AppRouter {
       ),
       GoRoute(
         path: '/document/:id',
-        builder: (context, state) => const DocumentResultScreen(),
+        builder: (context, state) =>
+            DocumentResultScreen(document: state.extra as GeneratedDocument?),
       ),
       GoRoute(
         path: '/history',
