@@ -9,7 +9,7 @@ import '../models/note.dart';
 ///   flutter run --dart-define=API_BASE_URL=https://ton-projet.vercel.app  → Vercel
 const _baseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://127.0.0.1:8000',
+  defaultValue: 'https://backend-beryl-two-39.vercel.app',
 );
 
 abstract class AiService {
