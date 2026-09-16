@@ -37,7 +37,7 @@ else:
         base_url="https://api.groq.com/openai/v1",
         api_key=os.environ.get("GROQ_API_KEY"),
     )
-    EXPRESS_MODEL = os.environ.get("GROQ_MODEL_EXPRESS", "llama-3.1-8b-instant")
+    EXPRESS_MODEL = os.environ.get("GROQ_MODEL_EXPRESS", "openai/gpt-oss-20b")
     AFFINE_MODEL = os.environ.get("GROQ_MODEL_AFFINE", "openai/gpt-oss-120b")
 
 
