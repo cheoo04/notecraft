@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../../../models/document.dart';
 
@@ -17,7 +18,7 @@ class DocumentResultScreen extends StatelessWidget {
           ? const Center(child: Text('Aucun document reçu'))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: SelectableText(document!.content!),
+              child: GptMarkdown(document!.content!),
             ),
     );
   }
