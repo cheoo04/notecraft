@@ -43,9 +43,9 @@ else:
 
 def generate(prompt: str, mode: str) -> str:
     if mode == "express":
-        return _single_pass(prompt, EXPRESS_MODEL, max_tokens=1200)
+        return _single_pass(prompt, EXPRESS_MODEL, max_tokens=2000)
 
-    draft = _single_pass(prompt, AFFINE_MODEL, max_tokens=2400)
+    draft = _single_pass(prompt, AFFINE_MODEL, max_tokens=3000)
     refine_prompt = f"""
 Voici un premier brouillon de document. Relis-le et corrige tout ce qui
 pourrait trahir un rendu IA générique.
@@ -57,7 +57,7 @@ Renvoie uniquement la version corrigée, sans commentaire ni préambule.
 Brouillon :
 {draft}
 """
-    return _single_pass(refine_prompt, AFFINE_MODEL, max_tokens=2400)
+    return _single_pass(refine_prompt, AFFINE_MODEL, max_tokens=3000)
 
 
 def _single_pass(prompt: str, model: str, max_tokens: int) -> str:

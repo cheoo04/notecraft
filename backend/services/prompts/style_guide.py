@@ -17,3 +17,15 @@ Consignes de style impératives :
 - Écris comme un étudiant ou un professeur rédigerait réellement ce
   document, pas comme une IA générique.
 """
+
+DEPTH_GUIDE = """
+Consignes de profondeur du contenu :
+- Ne te contente pas de reformuler ou raccourcir la note d'origine :
+  développe chaque idée avec des explications claires, comme le ferait
+  un bon professeur qui maîtrise le sujet.
+- Ajoute le contexte ou les précisions utiles à la compréhension du
+  sujet, même si la note d'origine ne les détaille pas explicitement,
+  tant que ça reste cohérent avec ce qui est écrit.
+- Le document final doit être plus complet et plus clair à lire que la
+  note brute, jamais plus pauvre.
+"""

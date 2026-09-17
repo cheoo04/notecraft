@@ -2,16 +2,16 @@ from fastapi import APIRouter
 
 from models.schemas import GenerateRequest, GenerateResponse
 from services import ai_client
-from services.prompts import fiche_cornell, rapport, resume
+from services.prompts import expose, fiche_cornell, plan_de_cours, rapport, resume
 
 router = APIRouter()
 
 _PROMPT_BUILDERS = {
     "resume": resume.build_prompt,
     "rapport": rapport.build_prompt,
+    "expose": expose.build_prompt,
+    "plan_de_cours": plan_de_cours.build_prompt,
     "fiche_de_revision": fiche_cornell.build_prompt,
-    # TODO: formats "expose" et "plan_de_cours" pas encore couverts,
-    # on retombe sur le résumé en attendant leurs prompts dédiés
 }
 
 
@@ -26,7 +26,7 @@ def generate_document(request: GenerateRequest):
     avec notification viendra une fois ce flux de base validé.
     """
     note_content = f"{request.note_title}\n\n{request.note_content}"
-    build_prompt = _PROMPT_BUILDERS.get(request.format.value, resume.build_prompt)
+    build_prompt = _PROMPT_BUILDERS[request.format.value]
 
     prompt = build_prompt(note_content)
     content = ai_client.generate(prompt, request.mode.value)
