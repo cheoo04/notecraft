@@ -1,12 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:printing/printing.dart';
 
 import '../../../models/document.dart';
+import '../../../services/export_service.dart';
 import '../../../services/storage_service.dart';
 
 /// Écran 5 — Résultat généré & export.
-/// TODO: export PDF/Word/SVG, rendu des schémas nettoyés.
+/// TODO: export Word/SVG, rendu des schémas nettoyés.
 class DocumentResultScreen extends ConsumerStatefulWidget {
   final GeneratedDocument? document;
 
@@ -23,6 +27,7 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
       TextEditingController(text: _document?.content ?? '');
   bool _editing = false;
   bool _saving = false;
+  bool _exporting = false;
 
   @override
   void dispose() {
@@ -61,6 +66,28 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
     setState(() => _editing = false);
   }
 
+  Future<void> _exportPdf() async {
+    final current = _document;
+    if (current == null) return;
+    setState(() => _exporting = true);
+    try {
+      final path = await ref.read(exportServiceProvider).exportToPdf(current);
+      final bytes = await File(path).readAsBytes();
+      if (!mounted) return;
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'notecraft_${current.id}.pdf',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Échec de l\'export PDF : $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final document = _document;
@@ -94,10 +121,28 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                       ],
                     )
             else
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: 'Modifier',
-                onPressed: _startEditing,
+              Row(
+                children: [
+                  _exporting
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          tooltip: 'Exporter en PDF',
+                          onPressed: _exportPdf,
+                        ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Modifier',
+                    onPressed: _startEditing,
+                  ),
+                ],
               ),
         ],
       ),
