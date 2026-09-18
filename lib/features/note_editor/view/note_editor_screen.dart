@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../services/storage_service.dart';
 import '../controller/note_editor_controller.dart';
 
 /// Écran 2 — Page blanche (V1 : saisie texte uniquement).
@@ -17,6 +18,7 @@ class NoteEditorScreen extends ConsumerStatefulWidget {
 class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -39,6 +41,23 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     super.dispose();
   }
 
+  Future<void> _onNext() async {
+    setState(() => _saving = true);
+    final note = ref.read(noteEditorControllerProvider.notifier).buildNote();
+    try {
+      await ref.read(storageServiceProvider).saveNote(note);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Note non sauvegardée (hors-ligne ?) : $e')),
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() => _saving = false);
+    context.push('/note/config', extra: note);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -54,14 +73,14 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 noteEditorControllerProvider.select((s) => s.canProceed),
               );
               return TextButton(
-                onPressed: canProceed
-                    ? () {
-                        final note =
-                            ref.read(noteEditorControllerProvider.notifier).buildNote();
-                        context.push('/note/config', extra: note);
-                      }
-                    : null,
-                child: const Text('Suivant'),
+                onPressed: (canProceed && !_saving) ? _onNext : null,
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Suivant'),
               );
             },
           ),

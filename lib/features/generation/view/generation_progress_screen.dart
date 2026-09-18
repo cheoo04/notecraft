@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/document.dart';
 import '../../../services/ai_service.dart';
+import '../../../services/storage_service.dart';
 import '../generation_request_args.dart';
 
 /// Écran 4 — Traitement & progression.
@@ -42,6 +43,16 @@ class _GenerationProgressScreenState
         format: args.format,
         mode: args.mode,
       );
+
+      // La sauvegarde du document ne doit jamais empêcher d'afficher le
+      // résultat : on l'isole dans son propre try/catch.
+      try {
+        await ref.read(storageServiceProvider).saveDocument(document);
+      } catch (_) {
+        // Best-effort : le document reste affichable même si la sauvegarde
+        // Firestore échoue (hors-ligne, règles non configurées, etc.).
+      }
+
       if (!mounted) return;
       context.replace('/document/${document.id}', extra: document);
     } catch (e) {

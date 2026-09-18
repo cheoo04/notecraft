@@ -25,4 +25,28 @@ class GeneratedDocument {
     this.cleanedSketchSvgPaths = const [],
     required this.createdAt,
   });
+
+  Map<String, dynamic> toMap() => {
+        'noteId': noteId,
+        'format': format.name,
+        'mode': mode.name,
+        'status': status.name,
+        'content': content,
+        'cleanedSketchSvgPaths': cleanedSketchSvgPaths,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory GeneratedDocument.fromMap(String id, Map<String, dynamic> map) =>
+      GeneratedDocument(
+        id: id,
+        noteId: map['noteId'] as String,
+        format: DocumentFormat.values.byName(map['format'] as String),
+        mode: GenerationMode.values.byName(map['mode'] as String),
+        status: DocumentStatus.values.byName(map['status'] as String),
+        content: map['content'] as String?,
+        cleanedSketchSvgPaths:
+            (map['cleanedSketchSvgPaths'] as List?)?.cast<String>() ??
+                const [],
+        createdAt: DateTime.parse(map['createdAt'] as String),
+      );
 }

@@ -43,7 +43,7 @@ class AiServiceImpl implements AiService {
 
     final data = response.data as Map<String, dynamic>;
     return GeneratedDocument(
-      id: data['document_id'] as String? ?? 'local',
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
       noteId: note.id,
       format: format,
       mode: mode,
