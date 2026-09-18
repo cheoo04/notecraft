@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/utils/date_format_helper.dart';
 
 import '../../../models/note.dart';
@@ -45,6 +46,7 @@ class HistoryScreen extends ConsumerWidget {
                 subtitle: Text(
                   formatNoteDate(note.createdAt),
                 ),
+                onTap: () => context.push('/note/detail', extra: note),
               );
             },
           );

@@ -50,6 +50,7 @@ class HomeScreen extends ConsumerWidget {
                 subtitle: Text(
                   formatNoteDate(note.createdAt),
                 ),
+                onTap: () => context.push('/note/detail', extra: note),
               );
             },
           );

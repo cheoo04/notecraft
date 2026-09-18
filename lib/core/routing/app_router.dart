@@ -5,6 +5,7 @@ import '../../features/generation/generation_request_args.dart';
 import '../../features/generation/view/generation_config_screen.dart';
 import '../../features/generation/view/generation_progress_screen.dart';
 import '../../features/history/view/history_screen.dart';
+import '../../features/history/view/note_detail_screen.dart';
 import '../../features/home/view/home_screen.dart';
 import '../../features/note_editor/view/note_editor_screen.dart';
 import '../../features/settings/view/settings_screen.dart';
@@ -19,6 +20,11 @@ class AppRouter {
       GoRoute(
         path: '/note/new',
         builder: (context, state) => const NoteEditorScreen(),
+      ),
+      GoRoute(
+        path: '/note/detail',
+        builder: (context, state) =>
+            NoteDetailScreen(note: state.extra as Note),
       ),
       GoRoute(
         path: '/note/config',
