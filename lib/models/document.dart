@@ -26,6 +26,19 @@ class GeneratedDocument {
     required this.createdAt,
   });
 
+  GeneratedDocument copyWith({String? content}) {
+    return GeneratedDocument(
+      id: id,
+      noteId: noteId,
+      format: format,
+      mode: mode,
+      status: status,
+      content: content ?? this.content,
+      cleanedSketchSvgPaths: cleanedSketchSvgPaths,
+      createdAt: createdAt,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
         'noteId': noteId,
         'format': format.name,
