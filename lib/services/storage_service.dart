@@ -43,13 +43,12 @@ class FirestoreStorageService implements StorageService {
 
   @override
   Future<List<GeneratedDocument>> getDocumentsForNote(String noteId) async {
-    final snapshot = await _documents
-        .where('noteId', isEqualTo: noteId)
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snapshot.docs
+    final snapshot = await _documents.where('noteId', isEqualTo: noteId).get();
+    final docs = snapshot.docs
         .map((d) => GeneratedDocument.fromMap(d.id, d.data()))
         .toList();
+    docs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return docs;
   }
 }
 
