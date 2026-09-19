@@ -75,46 +75,56 @@ def interpret_sketch(image_bytes: bytes) -> dict:
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
     if PROVIDER == "anthropic":
-        response = _client.messages.create(
-            model=VISION_MODEL,
-            max_tokens=2000,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": image_b64,
+        try:
+            response = _client.messages.create(
+                model=VISION_MODEL,
+                max_tokens=2000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": image_b64,
+                                },
                             },
-                        },
-                        {"type": "text", "text": _PROMPT},
-                    ],
-                }
-            ],
-        )
+                            {"type": "text", "text": _PROMPT},
+                        ],
+                    }
+                ],
+            )
+        except Exception as e:
+            # Toute erreur SDK (modèle inconnu/indisponible, clé invalide,
+            # quota, etc.) devient une ValueError propre plutôt qu'un
+            # crash brut de l'app — voir routes/sketch.py qui la convertit
+            # en réponse HTTP 502 lisible.
+            raise ValueError(f"Appel au modèle vision ({VISION_MODEL}) échoué : {e}") from e
         raw = "".join(
             block.text for block in response.content if block.type == "text"
         )
     else:
-        response = _client.chat.completions.create(
-            model=VISION_MODEL,
-            max_tokens=2000,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": _PROMPT},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-                        },
-                    ],
-                }
-            ],
-        )
+        try:
+            response = _client.chat.completions.create(
+                model=VISION_MODEL,
+                max_tokens=2000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": _PROMPT},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                            },
+                        ],
+                    }
+                ],
+            )
+        except Exception as e:
+            raise ValueError(f"Appel au modèle vision ({VISION_MODEL}) échoué : {e}") from e
         raw = response.choices[0].message.content
 
     return _parse_response(raw)
