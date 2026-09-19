@@ -5,22 +5,25 @@ import '../../../models/note.dart';
 class NoteEditorState {
   final String title;
   final String content;
-  final String? sketchPath;
+  final List<String> sketchPaths;
 
-  const NoteEditorState({this.title = '', this.content = '', this.sketchPath});
+  const NoteEditorState({
+    this.title = '',
+    this.content = '',
+    this.sketchPaths = const [],
+  });
 
   bool get canProceed => content.trim().isNotEmpty;
 
   NoteEditorState copyWith({
     String? title,
     String? content,
-    String? sketchPath,
-    bool clearSketch = false,
+    List<String>? sketchPaths,
   }) {
     return NoteEditorState(
       title: title ?? this.title,
       content: content ?? this.content,
-      sketchPath: clearSketch ? null : (sketchPath ?? this.sketchPath),
+      sketchPaths: sketchPaths ?? this.sketchPaths,
     );
   }
 }
@@ -37,12 +40,18 @@ class NoteEditorController extends Notifier<NoteEditorState> {
     state = state.copyWith(content: value);
   }
 
-  void setSketchPath(String? path) {
-    if (path == null) {
-      state = state.copyWith(clearSketch: true);
-    } else {
-      state = state.copyWith(sketchPath: path);
-    }
+  /// Ajoute un nouveau schéma. Si ce chemin existe déjà dans la liste
+  /// (cas d'une édition d'un schéma existant : même fichier réécrit),
+  /// ne fait rien — pas de doublon.
+  void addSketch(String path) {
+    if (state.sketchPaths.contains(path)) return;
+    state = state.copyWith(sketchPaths: [...state.sketchPaths, path]);
+  }
+
+  void removeSketch(String path) {
+    state = state.copyWith(
+      sketchPaths: state.sketchPaths.where((p) => p != path).toList(),
+    );
   }
 
   /// Construit la [Note] à partir de la saisie courante.
@@ -53,7 +62,7 @@ class NoteEditorController extends Notifier<NoteEditorState> {
       id: now.microsecondsSinceEpoch.toString(),
       title: state.title.trim().isEmpty ? 'Note sans titre' : state.title.trim(),
       rawText: state.content.trim(),
-      rawSketchPath: state.sketchPath,
+      rawSketchPaths: state.sketchPaths,
       createdAt: now,
     );
   }

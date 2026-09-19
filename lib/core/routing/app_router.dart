@@ -24,7 +24,8 @@ class AppRouter {
       ),
       GoRoute(
         path: '/note/sketch',
-        builder: (context, state) => const SketchScreen(),
+        builder: (context, state) =>
+            SketchScreen(existingPngPath: state.extra as String?),
       ),
       GoRoute(
         path: '/note/detail',

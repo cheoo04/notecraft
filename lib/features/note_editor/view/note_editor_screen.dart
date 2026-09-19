@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../services/storage_service.dart';
 import '../controller/note_editor_controller.dart';
 
-/// Écran 2 — Page blanche (V1 : texte + esquisse).
+/// Écran 2 — Page blanche (V1 : texte + esquisses).
 /// Image et audio seront ajoutés dans une itération suivante.
 class NoteEditorScreen extends ConsumerStatefulWidget {
   const NoteEditorScreen({super.key});
@@ -45,12 +45,22 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   Future<void> _onAddSketch() async {
     final path = await context.push<String>('/note/sketch');
     if (path != null) {
-      ref.read(noteEditorControllerProvider.notifier).setSketchPath(path);
+      ref.read(noteEditorControllerProvider.notifier).addSketch(path);
     }
   }
 
-  void _onRemoveSketch() {
-    ref.read(noteEditorControllerProvider.notifier).setSketchPath(null);
+  Future<void> _onEditSketch(String existingPath) async {
+    await context.push<String>('/note/sketch', extra: existingPath);
+    if (!mounted) return;
+    // Le fichier a été réécrit au même chemin : on invalide le cache
+    // d'image de Flutter (indexé par chemin, pas par contenu) pour que
+    // la miniature reflète bien la dernière version.
+    FileImage(File(existingPath)).evict();
+    setState(() {});
+  }
+
+  void _onRemoveSketch(String path) {
+    ref.read(noteEditorControllerProvider.notifier).removeSketch(path);
   }
 
   Future<void> _onNext() async {
@@ -125,42 +135,68 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               ),
             ),
             const Divider(),
+            Text('Schémas', style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 8),
             Consumer(
               builder: (context, ref, _) {
-                final sketchPath = ref.watch(
-                  noteEditorControllerProvider.select((s) => s.sketchPath),
+                final sketchPaths = ref.watch(
+                  noteEditorControllerProvider.select((s) => s.sketchPaths),
                 );
-                if (sketchPath == null) {
-                  return TextButton.icon(
-                    onPressed: _onAddSketch,
-                    icon: const Icon(Icons.draw_outlined),
-                    label: const Text('Ajouter un schéma'),
-                  );
-                }
-                return Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(sketchPath),
-                        width: 56,
-                        height: 56,
-                        fit: BoxFit.cover,
+                return SizedBox(
+                  height: 72,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      for (final path in sketchPaths)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: GestureDetector(
+                            onTap: () => _onEditSketch(path),
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    width: 64,
+                                    height: 64,
+                                    color: Colors.grey.shade100,
+                                    child: Image.file(
+                                      File(path),
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: -6,
+                                  right: -6,
+                                  child: GestureDetector(
+                                    onTap: () => _onRemoveSketch(path),
+                                    child: const CircleAvatar(
+                                      radius: 10,
+                                      backgroundColor: Colors.black54,
+                                      child: Icon(Icons.close, size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      GestureDetector(
+                        onTap: _onAddSketch,
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.add),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('Schéma ajouté'),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: _onAddSketch,
-                      child: const Text('Refaire'),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Retirer le schéma',
-                      onPressed: _onRemoveSketch,
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),

@@ -1,14 +1,17 @@
-/// Une note d'origine saisie par l'utilisateur : texte, esquisse,
+/// Une note d'origine saisie par l'utilisateur : texte, esquisse(s),
 /// image(s) et/ou un audio (≤ 30 min).
 class Note {
   final String id;
   final String title;
   final String? rawText;
 
-  /// Chemin local du croquis brut tel que dessiné (PNG), avant
-  /// reconstruction. Distinct de [sketchSvgPath], qui contiendra le SVG
-  /// nettoyé une fois la reconstruction IA effectuée (étape suivante).
-  final String? rawSketchPath;
+  /// Chemins locaux des croquis bruts (PNG aplatis), un par schéma. Les
+  /// traits éditables (pour pouvoir rouvrir/gommer/compléter) sont
+  /// sauvegardés à côté en .json (même nom, autre extension) par
+  /// SketchScreen — pas besoin de les référencer ici.
+  final List<String> rawSketchPaths;
+
+  /// SVG nettoyé une fois la reconstruction IA effectuée (étape 3).
   final String? sketchSvgPath;
 
   final List<String> imagePaths;
@@ -20,7 +23,7 @@ class Note {
     required this.id,
     required this.title,
     this.rawText,
-    this.rawSketchPath,
+    this.rawSketchPaths = const [],
     this.sketchSvgPath,
     this.imagePaths = const [],
     this.audioPath,
@@ -31,7 +34,7 @@ class Note {
   Map<String, dynamic> toMap() => {
         'title': title,
         'rawText': rawText,
-        'rawSketchPath': rawSketchPath,
+        'rawSketchPaths': rawSketchPaths,
         'sketchSvgPath': sketchSvgPath,
         'imagePaths': imagePaths,
         'audioPath': audioPath,
@@ -43,7 +46,8 @@ class Note {
         id: id,
         title: map['title'] as String? ?? 'Note sans titre',
         rawText: map['rawText'] as String?,
-        rawSketchPath: map['rawSketchPath'] as String?,
+        rawSketchPaths:
+            (map['rawSketchPaths'] as List?)?.cast<String>() ?? const [],
         sketchSvgPath: map['sketchSvgPath'] as String?,
         imagePaths:
             (map['imagePaths'] as List?)?.cast<String>() ?? const [],
