@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/document.dart';
 import '../../../services/ai_service.dart';
+import '../../../services/sketch_service.dart';
 import '../../../services/storage_service.dart';
 import '../generation_request_args.dart';
 
@@ -25,6 +26,7 @@ class GenerationProgressScreen extends ConsumerStatefulWidget {
 class _GenerationProgressScreenState
     extends ConsumerState<GenerationProgressScreen> {
   String? _error;
+  String _status = 'Génération en cours...';
 
   @override
   void initState() {
@@ -37,12 +39,45 @@ class _GenerationProgressScreenState
     if (args == null) return;
 
     try {
+      var note = args.note;
+      final svgPaths = <String>[];
+
+      if (note.rawSketchPaths.isNotEmpty) {
+        setState(() => _status = 'Analyse des schémas...');
+        final sketchService = ref.read(sketchServiceProvider);
+        final descriptions = <String>[];
+
+        for (final path in note.rawSketchPaths) {
+          try {
+            final result = await sketchService.vectorize(path);
+            svgPaths.add(result.svgPath);
+            descriptions.add(result.description);
+          } catch (_) {
+            // Un schéma qui échoue à se reconstruire ne doit pas bloquer
+            // toute la génération — on continue avec les autres et sans
+            // celui-là plutôt que d'échouer en bloc.
+          }
+        }
+
+        if (descriptions.isNotEmpty) {
+          final schemaSection =
+              '--- Schémas fournis avec la note ---\n${descriptions.join('\n\n')}';
+          note = note.copyWith(
+            rawText: '${note.rawText ?? ''}\n\n$schemaSection',
+          );
+        }
+      }
+
+      setState(() => _status = 'Génération en cours...');
       final aiService = ref.read(aiServiceProvider);
-      final document = await aiService.generate(
-        note: args.note,
+      var document = await aiService.generate(
+        note: note,
         format: args.format,
         mode: args.mode,
       );
+      if (svgPaths.isNotEmpty) {
+        document = document.copyWith(cleanedSketchSvgPaths: svgPaths);
+      }
 
       // La sauvegarde du document ne doit jamais empêcher d'afficher le
       // résultat : on l'isole dans son propre try/catch.
@@ -67,8 +102,6 @@ class _GenerationProgressScreenState
       return const Scaffold(body: Center(child: Text('Aucune requête reçue')));
     }
 
-    final isAffine = widget.args!.mode == GenerationMode.affine;
-
     return Scaffold(
       body: Center(
         child: Padding(
@@ -79,12 +112,7 @@ class _GenerationProgressScreenState
               if (_error == null) ...[
                 const CircularProgressIndicator(color: AppColors.accentTeal),
                 const SizedBox(height: 16),
-                Text(
-                  isAffine
-                      ? 'Analyse affinée en cours...\nÇa peut prendre quelques minutes.'
-                      : 'Génération en cours...',
-                  textAlign: TextAlign.center,
-                ),
+                Text(_status, textAlign: TextAlign.center),
               ] else ...[
                 Text(
                   'Erreur : $_error\n\n'

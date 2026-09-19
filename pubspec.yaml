@@ -38,6 +38,7 @@ dependencies:
   # Base locale (accès hors-ligne à l'historique)
   path_provider: ^2.1.3
   gpt_markdown: ^1.2.1
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:

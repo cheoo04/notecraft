@@ -31,6 +31,20 @@ class Note {
     required this.createdAt,
   });
 
+  Note copyWith({String? rawText}) {
+    return Note(
+      id: id,
+      title: title,
+      rawText: rawText ?? this.rawText,
+      rawSketchPaths: rawSketchPaths,
+      sketchSvgPath: sketchSvgPath,
+      imagePaths: imagePaths,
+      audioPath: audioPath,
+      audioDuration: audioDuration,
+      createdAt: createdAt,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
         'title': title,
         'rawText': rawText,

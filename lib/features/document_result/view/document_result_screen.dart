@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:printing/printing.dart';
 
@@ -10,7 +11,7 @@ import '../../../services/export_service.dart';
 import '../../../services/storage_service.dart';
 
 /// Écran 5 — Résultat généré & export.
-/// TODO: export Word/SVG, rendu des schémas nettoyés.
+/// TODO: export Word.
 class DocumentResultScreen extends ConsumerStatefulWidget {
   final GeneratedDocument? document;
 
@@ -164,7 +165,35 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                 )
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
-                  child: GptMarkdown(document!.content!),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (document!.cleanedSketchSvgPaths.isNotEmpty) ...[
+                        SizedBox(
+                          height: 160,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: document.cleanedSketchSvgPaths.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              final path = document.cleanedSketchSvgPaths[index];
+                              return Container(
+                                width: 160,
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade300),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: SvgPicture.file(File(path)),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      GptMarkdown(document.content!),
+                    ],
+                  ),
                 ),
     );
   }

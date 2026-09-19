@@ -26,7 +26,10 @@ class GeneratedDocument {
     required this.createdAt,
   });
 
-  GeneratedDocument copyWith({String? content}) {
+  GeneratedDocument copyWith({
+    String? content,
+    List<String>? cleanedSketchSvgPaths,
+  }) {
     return GeneratedDocument(
       id: id,
       noteId: noteId,
@@ -34,7 +37,7 @@ class GeneratedDocument {
       mode: mode,
       status: status,
       content: content ?? this.content,
-      cleanedSketchSvgPaths: cleanedSketchSvgPaths,
+      cleanedSketchSvgPaths: cleanedSketchSvgPaths ?? this.cleanedSketchSvgPaths,
       createdAt: createdAt,
     );
   }
