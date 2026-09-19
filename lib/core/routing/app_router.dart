@@ -8,6 +8,7 @@ import '../../features/history/view/history_screen.dart';
 import '../../features/history/view/note_detail_screen.dart';
 import '../../features/home/view/home_screen.dart';
 import '../../features/note_editor/view/note_editor_screen.dart';
+import '../../features/note_editor/view/sketch_screen.dart';
 import '../../features/settings/view/settings_screen.dart';
 import '../../models/document.dart';
 import '../../models/note.dart';
@@ -20,6 +21,10 @@ class AppRouter {
       GoRoute(
         path: '/note/new',
         builder: (context, state) => const NoteEditorScreen(),
+      ),
+      GoRoute(
+        path: '/note/sketch',
+        builder: (context, state) => const SketchScreen(),
       ),
       GoRoute(
         path: '/note/detail',

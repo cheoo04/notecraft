@@ -4,7 +4,13 @@ class Note {
   final String id;
   final String title;
   final String? rawText;
+
+  /// Chemin local du croquis brut tel que dessiné (PNG), avant
+  /// reconstruction. Distinct de [sketchSvgPath], qui contiendra le SVG
+  /// nettoyé une fois la reconstruction IA effectuée (étape suivante).
+  final String? rawSketchPath;
   final String? sketchSvgPath;
+
   final List<String> imagePaths;
   final String? audioPath;
   final Duration? audioDuration;
@@ -14,6 +20,7 @@ class Note {
     required this.id,
     required this.title,
     this.rawText,
+    this.rawSketchPath,
     this.sketchSvgPath,
     this.imagePaths = const [],
     this.audioPath,
@@ -24,6 +31,7 @@ class Note {
   Map<String, dynamic> toMap() => {
         'title': title,
         'rawText': rawText,
+        'rawSketchPath': rawSketchPath,
         'sketchSvgPath': sketchSvgPath,
         'imagePaths': imagePaths,
         'audioPath': audioPath,
@@ -35,6 +43,7 @@ class Note {
         id: id,
         title: map['title'] as String? ?? 'Note sans titre',
         rawText: map['rawText'] as String?,
+        rawSketchPath: map['rawSketchPath'] as String?,
         sketchSvgPath: map['sketchSvgPath'] as String?,
         imagePaths:
             (map['imagePaths'] as List?)?.cast<String>() ?? const [],

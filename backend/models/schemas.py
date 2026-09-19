@@ -27,3 +27,12 @@ class GenerateResponse(BaseModel):
     document_id: str
     status: str
     content: str | None = None
+
+
+class SketchRequest(BaseModel):
+    image_base64: str
+
+
+class SketchResponse(BaseModel):
+    svg: str
+    description: str

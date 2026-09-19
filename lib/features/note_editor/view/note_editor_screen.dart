@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,9 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../../services/storage_service.dart';
 import '../controller/note_editor_controller.dart';
 
-/// Écran 2 — Page blanche (V1 : saisie texte uniquement).
-/// Esquisse, image et audio seront ajoutés dans une itération suivante,
-/// une fois ce flux de base validé.
+/// Écran 2 — Page blanche (V1 : texte + esquisse).
+/// Image et audio seront ajoutés dans une itération suivante.
 class NoteEditorScreen extends ConsumerStatefulWidget {
   const NoteEditorScreen({super.key});
 
@@ -39,6 +40,17 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     _titleController.dispose();
     _contentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onAddSketch() async {
+    final path = await context.push<String>('/note/sketch');
+    if (path != null) {
+      ref.read(noteEditorControllerProvider.notifier).setSketchPath(path);
+    }
+  }
+
+  void _onRemoveSketch() {
+    ref.read(noteEditorControllerProvider.notifier).setSketchPath(null);
   }
 
   Future<void> _onNext() async {
@@ -111,6 +123,46 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
               ),
+            ),
+            const Divider(),
+            Consumer(
+              builder: (context, ref, _) {
+                final sketchPath = ref.watch(
+                  noteEditorControllerProvider.select((s) => s.sketchPath),
+                );
+                if (sketchPath == null) {
+                  return TextButton.icon(
+                    onPressed: _onAddSketch,
+                    icon: const Icon(Icons.draw_outlined),
+                    label: const Text('Ajouter un schéma'),
+                  );
+                }
+                return Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(sketchPath),
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('Schéma ajouté'),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _onAddSketch,
+                      child: const Text('Refaire'),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Retirer le schéma',
+                      onPressed: _onRemoveSketch,
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
