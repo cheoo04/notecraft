@@ -13,6 +13,73 @@ import '../controller/settings_controller.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  void _showEditProfileDialog(BuildContext context, WidgetRef ref) {
+    final profile = ref.read(settingsControllerProvider).profile;
+    final firstCtrl = TextEditingController(text: profile.firstName);
+    final lastCtrl = TextEditingController(text: profile.lastName);
+    final schoolCtrl = TextEditingController(text: profile.school);
+    final subjectCtrl = TextEditingController(text: profile.favoriteSubject);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Modifier mon profil',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: firstCtrl,
+                  decoration: const InputDecoration(labelText: 'Prénom'),
+                ),
+                TextField(
+                  controller: lastCtrl,
+                  decoration: const InputDecoration(labelText: 'Nom'),
+                ),
+                TextField(
+                  controller: schoolCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'École / Filière (ex: ESIR)'),
+                ),
+                TextField(
+                  controller: subjectCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Matière favorite par défaut'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final notifier = ref.read(settingsControllerProvider.notifier);
+                notifier.updateName(
+                    firstCtrl.text.trim(), lastCtrl.text.trim());
+                notifier.updateSchool(schoolCtrl.text.trim());
+                if (subjectCtrl.text.trim().isNotEmpty) {
+                  notifier.updateFavoriteSubject(subjectCtrl.text.trim());
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showTonePicker(
       BuildContext context, WidgetRef ref, WritingTone current) {
     showModalBottomSheet(
@@ -41,7 +108,7 @@ class SettingsScreen extends ConsumerWidget {
                 ListTile(
                   title: const Text('Académique & Synthétique'),
                   subtitle: const Text(
-                      'Rigoureux et précis, idéal pour l\'université'),
+                      'Rigoureux et technique, idéal pour les écoles d\'ingénieurs'),
                   trailing: current == WritingTone.academique
                       ? const Icon(Icons.check, color: AppColors.accentTeal)
                       : null,
@@ -54,7 +121,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 ListTile(
                   title: const Text('Professionnel'),
-                  subtitle: const Text('Direct et orienté livrable de réunion'),
+                  subtitle:
+                      const Text('Direct et orienté livrable d\'entreprise'),
                   trailing: current == WritingTone.professionnel
                       ? const Icon(Icons.check, color: AppColors.accentTeal)
                       : null,
@@ -67,8 +135,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 ListTile(
                   title: const Text('Décontracté & Vulgarisé'),
-                  subtitle: const Text(
-                      'Style accessible pour une compréhension rapide'),
+                  subtitle:
+                      const Text('Style fluide pour une compréhension rapide'),
                   trailing: current == WritingTone.decontracte
                       ? const Icon(Icons.check, color: AppColors.accentTeal)
                       : null,
@@ -137,6 +205,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
+    final profile = settings.profile;
 
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
@@ -147,73 +216,95 @@ class SettingsScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           children: [
-            // Carte de profil (Diapositive 9)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.neutralBorder),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.accentTealLight,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.accentTeal.withValues(alpha: 0.2),
-                        width: 1.5,
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      'AM',
-                      style: TextStyle(
-                        color: AppColors.accentTeal,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Alex Martin',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.inkDark,
-                          ),
+            // Carte de profil dynamique avec tap pour modifier
+            InkWell(
+              onTap: () => _showEditProfileDialog(context, ref),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.neutralBorder),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: AppColors.accentTealLight,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.accentTeal.withValues(alpha: 0.2),
+                          width: 1.5,
                         ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        profile.initials.isNotEmpty ? profile.initials : 'NC',
+                        style: const TextStyle(
+                          color: AppColors.accentTeal,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                profile.fullName.isNotEmpty
+                                    ? profile.fullName
+                                    : 'Étudiant',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.inkDark,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.edit_outlined,
+                                  size: 14, color: AppColors.textMuted),
+                            ],
                           ),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentTealLight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'Abonnement Étudiant Pro',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.accentTeal,
+                          const SizedBox(height: 3),
+                          Text(
+                            profile.school.isNotEmpty
+                                ? profile.school
+                                : 'École d\'ingénieurs',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentTealLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Abonnement Étudiant Pro',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.accentTeal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -230,32 +321,44 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   ListTile(
+                    title: const Text('Matière favorite',
+                        style: TextStyle(fontSize: 14)),
+                    subtitle: Text(
+                      profile.favoriteSubject,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => _showEditProfileDialog(context, ref),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
                     title: const Text('Ton par défaut',
                         style: TextStyle(fontSize: 14)),
                     subtitle: Text(
-                      settings.tone == WritingTone.academique
+                      profile.tone == WritingTone.academique
                           ? 'Académique & Synthétique'
-                          : (settings.tone == WritingTone.professionnel
+                          : (profile.tone == WritingTone.professionnel
                               ? 'Professionnel'
                               : 'Décontracté'),
                       style: const TextStyle(
                           fontSize: 12, color: AppColors.textMuted),
                     ),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => _showTonePicker(context, ref, settings.tone),
+                    onTap: () => _showTonePicker(context, ref, profile.tone),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     title: const Text('Format favori',
                         style: TextStyle(fontSize: 14)),
                     subtitle: Text(
-                      formatLabel(settings.format),
+                      formatLabel(profile.defaultFormat),
                       style: const TextStyle(
                           fontSize: 12, color: AppColors.textMuted),
                     ),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () =>
-                        _showFormatPicker(context, ref, settings.format),
+                        _showFormatPicker(context, ref, profile.defaultFormat),
                   ),
                   const Divider(height: 1),
                   SwitchListTile(
@@ -269,7 +372,7 @@ class SettingsScreen extends ConsumerWidget {
                           TextStyle(fontSize: 12, color: AppColors.textMuted),
                     ),
                     activeThumbColor: AppColors.accentTeal,
-                    value: settings.keepAudioFiles,
+                    value: profile.keepAudioFiles,
                     onChanged: (val) {
                       HapticFeedback.selectionClick();
                       controller.toggleKeepAudio(val);
@@ -280,7 +383,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
 
-            // Section Abonnement & Quota
+            // Section Abonnement & Quota réel (calculé depuis Firestore)
             const _SectionHeader(title: 'ABONNEMENT & QUOTA'),
             const SizedBox(height: 8),
             Container(
@@ -305,7 +408,7 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                       ),
                       Text(
-                        '${settings.affineUsed} / ${settings.affineTotal} ce mois',
+                        '${settings.realAffineUsed} / ${profile.monthlyQuotaTotal} ce mois',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -318,7 +421,9 @@ class SettingsScreen extends ConsumerWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: LinearProgressIndicator(
-                      value: settings.affineUsed / settings.affineTotal,
+                      value:
+                          (settings.realAffineUsed / profile.monthlyQuotaTotal)
+                              .clamp(0.0, 1.0),
                       minHeight: 8,
                       backgroundColor: AppColors.neutralFill,
                       color: AppColors.accentTeal,

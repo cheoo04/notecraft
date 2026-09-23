@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_format_helper.dart';
 import '../../../models/note.dart';
+import '../../settings/controller/settings_controller.dart';
 import '../controller/home_controller.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -16,16 +17,23 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final homeState = ref.watch(homeControllerProvider);
     final controller = ref.read(homeControllerProvider.notifier);
+    final userProfile =
+        ref.watch(settingsControllerProvider.select((s) => s.profile));
 
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.accentTeal,
-          onRefresh: () => controller.loadNotes(),
+          onRefresh: () async {
+            await controller.loadNotes();
+            await ref
+                .read(settingsControllerProvider.notifier)
+                .refreshQuotaUsage();
+          },
           child: CustomScrollView(
             slivers: [
-              // En-tete : Salutation + Avatar
+              // En-tete dynamique : Vrai Prenom + Vraies Initiales
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -36,11 +44,12 @@ class HomeScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Bonjour Alex',
+                            'Bonjour ${userProfile.firstName}',
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: AppColors.textMuted,
                                       fontSize: 13,
+                                      fontWeight: FontWeight.w500,
                                     ),
                           ),
                           const SizedBox(height: 2),
@@ -55,24 +64,30 @@ class HomeScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: AppColors.accentTealLight,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.accentTeal.withValues(alpha: 0.2),
-                            width: 1.5,
+                      GestureDetector(
+                        onTap: () => context.push('/settings'),
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: AppColors.accentTealLight,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color:
+                                  AppColors.accentTeal.withValues(alpha: 0.2),
+                              width: 1.5,
+                            ),
                           ),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Text(
-                          'AM',
-                          style: TextStyle(
-                            color: AppColors.accentTeal,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                          alignment: Alignment.center,
+                          child: Text(
+                            userProfile.initials.isNotEmpty
+                                ? userProfile.initials
+                                : 'NC',
+                            style: const TextStyle(
+                              color: AppColors.accentTeal,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ),
@@ -154,7 +169,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              // Bannière Capture Rapide
+              // Banniere Capture Rapide
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -239,7 +254,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              // Titre section "Dernières captures"
+              // Titre section "Dernieres captures"
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),

@@ -4,53 +4,87 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/document.dart';
 import '../../../models/user_preferences.dart';
+import '../../../models/user_profile.dart';
+import '../../../services/storage_service.dart';
 
 class SettingsState {
-  final WritingTone tone;
-  final DocumentFormat format;
-  final bool keepAudioFiles;
-  final int affineUsed;
-  final int affineTotal;
+  final UserProfile profile;
+  final int realAffineUsed;
+  final bool isLoading;
 
   const SettingsState({
-    this.tone = WritingTone.academique,
-    this.format = DocumentFormat.ficheDeRevision,
-    this.keepAudioFiles = true,
-    this.affineUsed = 18,
-    this.affineTotal = 50,
+    this.profile = const UserProfile(),
+    this.realAffineUsed = 0,
+    this.isLoading = false,
   });
 
   SettingsState copyWith({
-    WritingTone? tone,
-    DocumentFormat? format,
-    bool? keepAudioFiles,
-    int? affineUsed,
-    int? affineTotal,
+    UserProfile? profile,
+    int? realAffineUsed,
+    bool? isLoading,
   }) {
     return SettingsState(
-      tone: tone ?? this.tone,
-      format: format ?? this.format,
-      keepAudioFiles: keepAudioFiles ?? this.keepAudioFiles,
-      affineUsed: affineUsed ?? this.affineUsed,
-      affineTotal: affineTotal ?? this.affineTotal,
+      profile: profile ?? this.profile,
+      realAffineUsed: realAffineUsed ?? this.realAffineUsed,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
 
 class SettingsController extends Notifier<SettingsState> {
   @override
-  SettingsState build() => const SettingsState();
+  SettingsState build() {
+    Future.microtask(() => refreshQuotaUsage());
+    return const SettingsState();
+  }
+
+  Future<void> refreshQuotaUsage() async {
+    try {
+      final storage = ref.read(storageServiceProvider);
+      final notes = await storage.getNotes();
+      int count = 0;
+      for (final n in notes) {
+        final docs = await storage.getDocumentsForNote(n.id);
+        count += docs.where((d) => d.mode == GenerationMode.affine).length;
+      }
+      state = state.copyWith(realAffineUsed: count);
+    } catch (_) {}
+  }
+
+  void updateName(String firstName, String lastName) {
+    state = state.copyWith(
+      profile: state.profile.copyWith(firstName: firstName, lastName: lastName),
+    );
+  }
+
+  void updateSchool(String school) {
+    state = state.copyWith(
+      profile: state.profile.copyWith(school: school),
+    );
+  }
+
+  void updateFavoriteSubject(String subject) {
+    state = state.copyWith(
+      profile: state.profile.copyWith(favoriteSubject: subject),
+    );
+  }
 
   void updateTone(WritingTone tone) {
-    state = state.copyWith(tone: tone);
+    state = state.copyWith(
+      profile: state.profile.copyWith(tone: tone),
+    );
   }
 
   void updateFormat(DocumentFormat format) {
-    state = state.copyWith(format: format);
+    state = state.copyWith(
+      profile: state.profile.copyWith(defaultFormat: format),
+    );
   }
 
   void toggleKeepAudio(bool value) {
-    state = state.copyWith(keepAudioFiles: value);
+    state = state.copyWith(
+      profile: state.profile.copyWith(keepAudioFiles: value),
+    );
   }
 }
 

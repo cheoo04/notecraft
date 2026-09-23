@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/note.dart';
+import '../../settings/controller/settings_controller.dart';
 
 class NoteEditorState {
   final String title;
@@ -17,7 +18,7 @@ class NoteEditorState {
 
   const NoteEditorState({
     this.title = '',
-    this.subject = 'Physique',
+    this.subject = 'Informatique',
     this.content = '',
     this.sketchPaths = const [],
     this.imagePaths = const [],
@@ -71,7 +72,11 @@ class NoteEditorController extends Notifier<NoteEditorState> {
   @override
   NoteEditorState build() {
     ref.onDispose(() => _recordingTimer?.cancel());
-    return const NoteEditorState();
+    final defaultSubject =
+        ref.read(settingsControllerProvider).profile.favoriteSubject;
+    return NoteEditorState(
+      subject: defaultSubject.isNotEmpty ? defaultSubject : 'Général',
+    );
   }
 
   void updateTitle(String value) {
@@ -116,7 +121,6 @@ class NoteEditorController extends Notifier<NoteEditorState> {
 
     _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (state.recordingSeconds >= 1800) {
-        // Limite maximale de 30 minutes atteinte
         stopRecording();
       } else {
         state = state.copyWith(recordingSeconds: state.recordingSeconds + 1);
@@ -127,7 +131,6 @@ class NoteEditorController extends Notifier<NoteEditorState> {
   void stopRecording() {
     _recordingTimer?.cancel();
     final duration = Duration(seconds: state.recordingSeconds);
-    // Identifiant local de session audio
     final mockAudioPath =
         'audio_record_${DateTime.now().millisecondsSinceEpoch}.m4a';
     state = state.copyWith(
