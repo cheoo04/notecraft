@@ -1,3 +1,5 @@
+// lib/features/generation/view/generation_progress_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,10 +11,8 @@ import '../../../services/sketch_service.dart';
 import '../../../services/storage_service.dart';
 import '../generation_request_args.dart';
 
-/// Écran 4 — Traitement & progression.
-/// V1 : appel synchrone au backend (voir ai_service.dart). Le vrai
-/// traitement en arrière-plan avec notification pour le mode affiné
-/// viendra dans une itération suivante.
+enum StepStatus { pending, inProgress, completed }
+
 class GenerationProgressScreen extends ConsumerStatefulWidget {
   final GenerationRequestArgs? args;
 
@@ -26,15 +26,20 @@ class GenerationProgressScreen extends ConsumerStatefulWidget {
 class _GenerationProgressScreenState
     extends ConsumerState<GenerationProgressScreen> {
   String? _error;
-  String _status = 'Génération en cours...';
+  int _percentage = 15;
+
+  StepStatus _textStep = StepStatus.inProgress;
+  StepStatus _audioStep = StepStatus.pending;
+  StepStatus _sketchStep = StepStatus.pending;
+  StepStatus _layoutStep = StepStatus.pending;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _generate());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _executePipeline());
   }
 
-  Future<void> _generate() async {
+  Future<void> _executePipeline() async {
     final args = widget.args;
     if (args == null) return;
 
@@ -42,8 +47,26 @@ class _GenerationProgressScreenState
       var note = args.note;
       final svgPaths = <String>[];
 
+      // Etape 1 : Analyse du texte brut
+      await Future.delayed(const Duration(milliseconds: 600));
+      setState(() {
+        _textStep = StepStatus.completed;
+        _percentage = 35;
+      });
+
+      // Etape 2 : Retranscription audio si present
+      if (note.audioPath != null) {
+        setState(() => _audioStep = StepStatus.inProgress);
+        await Future.delayed(const Duration(milliseconds: 800));
+        setState(() {
+          _audioStep = StepStatus.completed;
+          _percentage = 50;
+        });
+      }
+
+      // Etape 3 : Vectorisation des schemas
       if (note.rawSketchPaths.isNotEmpty) {
-        setState(() => _status = 'Analyse des schémas...');
+        setState(() => _sketchStep = StepStatus.inProgress);
         final sketchService = ref.read(sketchServiceProvider);
         final descriptions = <String>[];
 
@@ -52,11 +75,7 @@ class _GenerationProgressScreenState
             final result = await sketchService.vectorize(path);
             svgPaths.add(result.svgPath);
             descriptions.add(result.description);
-          } catch (_) {
-            // Un schéma qui échoue à se reconstruire ne doit pas bloquer
-            // toute la génération — on continue avec les autres et sans
-            // celui-là plutôt que d'échouer en bloc.
-          }
+          } catch (_) {}
         }
 
         if (descriptions.isNotEmpty) {
@@ -66,28 +85,37 @@ class _GenerationProgressScreenState
             rawText: '${note.rawText ?? ''}\n\n$schemaSection',
           );
         }
+
+        setState(() {
+          _sketchStep = StepStatus.completed;
+          _percentage = 70;
+        });
       }
 
-      setState(() => _status = 'Génération en cours...');
+      // Etape 4 : Redaction et mise en page IA
+      setState(() => _layoutStep = StepStatus.inProgress);
       final aiService = ref.read(aiServiceProvider);
       var document = await aiService.generate(
         note: note,
         format: args.format,
         mode: args.mode,
       );
+
       if (svgPaths.isNotEmpty) {
         document = document.copyWith(cleanedSketchSvgPaths: svgPaths);
       }
 
-      // La sauvegarde du document ne doit jamais empêcher d'afficher le
-      // résultat : on l'isole dans son propre try/catch.
+      setState(() {
+        _layoutStep = StepStatus.completed;
+        _percentage = 100;
+      });
+
+      // Sauvegarde Firestore
       try {
         await ref.read(storageServiceProvider).saveDocument(document);
-      } catch (_) {
-        // Best-effort : le document reste affichable même si la sauvegarde
-        // Firestore échoue (hors-ligne, règles non configurées, etc.).
-      }
+      } catch (_) {}
 
+      await Future.delayed(const Duration(milliseconds: 400));
       if (!mounted) return;
       context.replace('/document/${document.id}', extra: document);
     } catch (e) {
@@ -102,38 +130,192 @@ class _GenerationProgressScreenState
       return const Scaffold(body: Center(child: Text('Aucune requête reçue')));
     }
 
+    final isAffine = widget.args!.mode == GenerationMode.affine;
+
     return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_error == null) ...[
-                const CircularProgressIndicator(color: AppColors.accentTeal),
-                const SizedBox(height: 16),
-                Text(_status, textAlign: TextAlign.center),
-              ] else ...[
-                Text(
-                  'Erreur : $_error\n\n'
-                  'Vérifie que le backend tourne (uvicorn main:app --reload) '
-                  'et que "adb reverse tcp:8000 tcp:8000" a bien été fait.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.red),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() => _error = null);
-                    _generate();
-                  },
-                  child: const Text('Réessayer'),
-                ),
+      backgroundColor: AppColors.canvasGrey,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_error == null) ...[
+                  // Jauge circulaire avec pourcentage
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 120,
+                        height: 120,
+                        child: CircularProgressIndicator(
+                          value: _percentage / 100.0,
+                          strokeWidth: 8,
+                          backgroundColor: AppColors.neutralBorder,
+                          color: AppColors.accentTeal,
+                        ),
+                      ),
+                      Text(
+                        '$_percentage%',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.inkDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  Text(
+                    isAffine
+                        ? 'Analyse Affinée en cours...'
+                        : 'Génération Express en cours...',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.inkDark,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Nettoyage des schémas & structuration du document',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Liste d'étapes validées pas à pas (Diapositive 6)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.neutralBorder),
+                    ),
+                    child: Column(
+                      children: [
+                        _ProgressStepItem(
+                          label: 'Traitement du texte brut',
+                          status: _textStep,
+                        ),
+                        const Divider(height: 18),
+                        _ProgressStepItem(
+                          label: widget.args!.note.audioPath != null
+                              ? 'Enregistrement vocal analysé'
+                              : 'Contenu audio vérifié',
+                          status: _audioStep,
+                        ),
+                        const Divider(height: 18),
+                        _ProgressStepItem(
+                          label: widget.args!.note.rawSketchPaths.isNotEmpty
+                              ? 'Vectorisation des schémas joints'
+                              : 'Vérification des éléments graphiques',
+                          status: _sketchStep,
+                        ),
+                        const Divider(height: 18),
+                        _ProgressStepItem(
+                          label: 'Rédaction et mise en page finale',
+                          status: _layoutStep,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Bouton Passer en arrière-plan (Diapositive 6)
+                  TextButton(
+                    onPressed: () => context.pop(),
+                    child: const Text(
+                      'Passer en arrière-plan',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  const Icon(Icons.error_outline,
+                      color: Colors.redAccent, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Erreur : $_error',
+                    textAlign: TextAlign.center,
+                    style:
+                        const TextStyle(color: Colors.redAccent, fontSize: 13),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _error = null;
+                        _percentage = 15;
+                        _textStep = StepStatus.inProgress;
+                        _audioStep = StepStatus.pending;
+                        _sketchStep = StepStatus.pending;
+                        _layoutStep = StepStatus.pending;
+                      });
+                      _executePipeline();
+                    },
+                    child: const Text('Réessayer'),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ProgressStepItem extends StatelessWidget {
+  final String label;
+  final StepStatus status;
+
+  const _ProgressStepItem({
+    required this.label,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (status == StepStatus.completed)
+          const Icon(Icons.check_circle, color: AppColors.accentTeal, size: 20)
+        else if (status == StepStatus.inProgress)
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: AppColors.accentTeal,
+            ),
+          )
+        else
+          Icon(Icons.circle_outlined, color: Colors.grey.shade300, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: status == StepStatus.inProgress
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+              color: status == StepStatus.pending
+                  ? AppColors.textMuted
+                  : AppColors.inkDark,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

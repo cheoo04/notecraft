@@ -1,19 +1,14 @@
-/// Une note d'origine saisie par l'utilisateur : texte, esquisse(s),
-/// image(s) et/ou un audio (≤ 30 min).
+// lib/models/note.dart
+
+/// Une note saisie par l'utilisateur : texte, esquisses, photos, audio (≤ 30 min)
+/// et métadonnées de cours (matière, tags).
 class Note {
   final String id;
   final String title;
+  final String subject; // Ex: Physique, Biologie, Économie, Droit
   final String? rawText;
-
-  /// Chemins locaux des croquis bruts (PNG aplatis), un par schéma. Les
-  /// traits éditables (pour pouvoir rouvrir/gommer/compléter) sont
-  /// sauvegardés à côté en .json (même nom, autre extension) par
-  /// SketchScreen — pas besoin de les référencer ici.
   final List<String> rawSketchPaths;
-
-  /// SVG nettoyé une fois la reconstruction IA effectuée (étape 3).
   final String? sketchSvgPath;
-
   final List<String> imagePaths;
   final String? audioPath;
   final Duration? audioDuration;
@@ -22,6 +17,7 @@ class Note {
   const Note({
     required this.id,
     required this.title,
+    this.subject = 'Général',
     this.rawText,
     this.rawSketchPaths = const [],
     this.sketchSvgPath,
@@ -31,22 +27,33 @@ class Note {
     required this.createdAt,
   });
 
-  Note copyWith({String? rawText}) {
+  Note copyWith({
+    String? title,
+    String? subject,
+    String? rawText,
+    List<String>? rawSketchPaths,
+    String? sketchSvgPath,
+    List<String>? imagePaths,
+    String? audioPath,
+    Duration? audioDuration,
+  }) {
     return Note(
       id: id,
-      title: title,
+      title: title ?? this.title,
+      subject: subject ?? this.subject,
       rawText: rawText ?? this.rawText,
-      rawSketchPaths: rawSketchPaths,
-      sketchSvgPath: sketchSvgPath,
-      imagePaths: imagePaths,
-      audioPath: audioPath,
-      audioDuration: audioDuration,
+      rawSketchPaths: rawSketchPaths ?? this.rawSketchPaths,
+      sketchSvgPath: sketchSvgPath ?? this.sketchSvgPath,
+      imagePaths: imagePaths ?? this.imagePaths,
+      audioPath: audioPath ?? this.audioPath,
+      audioDuration: audioDuration ?? this.audioDuration,
       createdAt: createdAt,
     );
   }
 
   Map<String, dynamic> toMap() => {
         'title': title,
+        'subject': subject,
         'rawText': rawText,
         'rawSketchPaths': rawSketchPaths,
         'sketchSvgPath': sketchSvgPath,
@@ -59,12 +66,12 @@ class Note {
   factory Note.fromMap(String id, Map<String, dynamic> map) => Note(
         id: id,
         title: map['title'] as String? ?? 'Note sans titre',
+        subject: map['subject'] as String? ?? 'Général',
         rawText: map['rawText'] as String?,
         rawSketchPaths:
             (map['rawSketchPaths'] as List?)?.cast<String>() ?? const [],
         sketchSvgPath: map['sketchSvgPath'] as String?,
-        imagePaths:
-            (map['imagePaths'] as List?)?.cast<String>() ?? const [],
+        imagePaths: (map['imagePaths'] as List?)?.cast<String>() ?? const [],
         audioPath: map['audioPath'] as String?,
         audioDuration: map['audioDurationMs'] != null
             ? Duration(milliseconds: map['audioDurationMs'] as int)

@@ -1,31 +1,20 @@
-"""
-Consigne de style commune, à injecter dans tous les prompts de génération.
-Reprend les exigences de la section 5.3 du cahier des charges :
-un document qui ne "sent" pas l'IA.
-"""
+# backend/services/prompts/style_guide.py
 
 STYLE_GUIDE = """
 Consignes de style impératives :
-- N'utilise jamais le tiret cadratin (—). Remplace-le par une virgule,
-  un point, ou reformule la phrase.
-- Varie la longueur et la construction des phrases, évite les tournures
-  robotiques ou trop lisses.
-- N'utilise un tableau que s'il structure une vraie comparaison ou
-  énumération, jamais par réflexe de mise en forme.
-- Évite le sur-listage systématique : privilégie le texte suivi quand
-  le contenu s'y prête.
-- Écris comme un étudiant ou un professeur rédigerait réellement ce
-  document, pas comme une IA générique.
+- N'utilise JAMAIS de tiret cadratin (—) ni de demi-cadratin (–). Utilise exclusivement des deux-points (:), des virgules, des parenthèses ou de simples tirets courts (-).
+- N'utilise JAMAIS de tableau Markdown pour afficher du texte rédigé ou de longues explications. Sur mobile, privilégie une hiérarchie verticale claire avec des sous-titres nets.
+- Mets en valeur les définitions fondamentales, formules et axiomes avec des blocs de citation (débutant par >).
+- Bannis tout ton de vulgarisation simpliste ou enfantin : écris avec la rigueur d'un cours d'école d'ingénieurs ou d'université scientifique.
+- Reste précis sur le vocabulaire technique, sans paraphraser ni affaiblir les concepts.
 """
 
 DEPTH_GUIDE = """
-Consignes de profondeur du contenu :
-- Ne te contente pas de reformuler ou raccourcir la note d'origine :
-  développe chaque idée avec des explications claires, comme le ferait
-  un bon professeur qui maîtrise le sujet.
-- Ajoute le contexte ou les précisions utiles à la compréhension du
-  sujet, même si la note d'origine ne les détaille pas explicitement,
-  tant que ça reste cohérent avec ce qui est écrit.
-- Le document final doit être plus complet et plus clair à lire que la
-  note brute, jamais plus pauvre.
+Consignes de profondeur et de rigueur d'ingénierie :
+- Si la note aborde des technologies, algorithmes, protocoles ou systèmes (ex: IoT, réseaux, architecture matérielle, complexité algorithmique, sécurité) :
+  1. Origine et Contexte : Explique systématiquement quel problème technique ou matériel précis cet outil est venu résoudre, et pourquoi les solutions préexistantes étaient inadaptées.
+  2. Fonctionnement interne : Détaille les mécanismes sous le capot (pile de couches, gestion des ressources, mémoire, consommation électrique, complexité temporelle/spatiale O(f(n)), etc.).
+  3. Matrice de compromis et Alternatives : Mentionne les technologies concurrentes ou complémentaires, et explique clairement les critères de choix (ex: latence vs autonomie, mémoire vs vitesse).
+  4. Mise en pratique : Ajoute les contraintes concrètes d'implémentation et de gestion que doit connaître un futur ingénieur.
+- Le document généré ne doit jamais se contenter de lister des termes : il doit donner les clés de compréhension globale du système.
 """

@@ -1,3 +1,5 @@
+// lib/models/user_preferences.dart
+
 import 'document.dart';
 
 enum WritingTone { academique, professionnel, decontracte }
@@ -10,7 +12,7 @@ class UserPreferences {
 
   const UserPreferences({
     this.defaultTone = WritingTone.academique,
-    this.defaultFormat = DocumentFormat.ficheDeRevision,
+    this.defaultFormat = DocumentFormat.resume,
     this.defaultMode = GenerationMode.express,
     this.keepAudioFiles = true,
   });

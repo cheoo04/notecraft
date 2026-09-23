@@ -37,7 +37,7 @@ class ExportServiceImpl implements ExportService {
           children: [
             pw.Text(
               formatLabel(document.format),
-              style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
             ),
             pw.Divider(color: PdfColors.grey400),
           ],
@@ -54,8 +54,9 @@ class ExportServiceImpl implements ExportService {
 
   @override
   Future<String> exportToWord(GeneratedDocument document) {
-    // TODO: POST /export/word au backend
-    throw UnimplementedError();
+    // Génération .docx via python-docx planifiée pour la V2
+    throw UnsupportedError(
+        'L\'export Word sera disponible dans la prochaine version.');
   }
 
   @override
@@ -143,7 +144,8 @@ List<pw.Widget> _buildTextLines(String content) {
         padding: const pw.EdgeInsets.only(top: 8, bottom: 4),
         child: pw.Text(
           boldLineMatch.group(1)!,
-          style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+          style:
+              const pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
         ),
       ));
       continue;
@@ -186,7 +188,7 @@ pw.Widget _inlineText(String text) {
     }
     spans.add(pw.TextSpan(
       text: match.group(1),
-      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+      style: const pw.TextStyle(fontWeight: pw.FontWeight.bold),
     ));
     last = match.end;
   }
