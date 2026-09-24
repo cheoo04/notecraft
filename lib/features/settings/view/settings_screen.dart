@@ -216,108 +216,112 @@ class SettingsScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           children: [
-            // Carte de profil dynamique avec tap pour modifier
-            InkWell(
-              onTap: () => _showEditProfileDialog(context, ref),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.neutralBorder),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTealLight,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.accentTeal.withValues(alpha: 0.2),
-                          width: 1.5,
+            // Carte de profil dynamique avec Material
+            Material(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: AppColors.neutralBorder),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => _showEditProfileDialog(context, ref),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: AppColors.accentTealLight,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.accentTeal.withValues(alpha: 0.2),
+                            width: 1.5,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          profile.initials.isNotEmpty ? profile.initials : 'NC',
+                          style: const TextStyle(
+                            color: AppColors.accentTeal,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        profile.initials.isNotEmpty ? profile.initials : 'NC',
-                        style: const TextStyle(
-                          color: AppColors.accentTeal,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                profile.fullName.isNotEmpty
-                                    ? profile.fullName
-                                    : 'Étudiant',
-                                style: const TextStyle(
-                                  fontSize: 16,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  profile.fullName.isNotEmpty
+                                      ? profile.fullName
+                                      : 'Étudiant',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.inkDark,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Icon(Icons.edit_outlined,
+                                    size: 14, color: AppColors.textMuted),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              profile.school.isNotEmpty
+                                  ? profile.school
+                                  : 'École d\'ingénieurs',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentTealLight,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Abonnement Étudiant Pro',
+                                style: TextStyle(
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.inkDark,
+                                  color: AppColors.accentTeal,
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              const Icon(Icons.edit_outlined,
-                                  size: 14, color: AppColors.textMuted),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            profile.school.isNotEmpty
-                                ? profile.school
-                                : 'École d\'ingénieurs',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
                             ),
-                          ),
-                          const SizedBox(height: 5),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentTealLight,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Abonnement Étudiant Pro',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.accentTeal,
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                  ],
+                      const Icon(Icons.chevron_right,
+                          color: AppColors.textMuted),
+                    ],
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 24),
 
-            // Section Préférences de génération
+            // Section Préférences de génération avec Material
             const _SectionHeader(title: 'PRÉFÉRENCES DE GÉNÉRATION'),
             const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
+            Material(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.neutralBorder),
+                side: const BorderSide(color: AppColors.neutralBorder),
               ),
+              clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
                   ListTile(

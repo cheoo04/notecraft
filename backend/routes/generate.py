@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+# backend/routes/generate.py
+
+from fastapi import APIRouter, HTTPException
 
 from models.schemas import GenerateRequest, GenerateResponse
 from services import ai_client
@@ -17,18 +19,19 @@ _PROMPT_BUILDERS = {
 
 @router.post("/", response_model=GenerateResponse)
 def generate_document(request: GenerateRequest):
-    """
-    Reçoit le contenu d'une note, un format de sortie et un mode, et
-    retourne le document généré.
+    try:
+        raw_content = request.note_content.strip()
 
-    V1 : traitement synchrone dans les deux modes (le mode affiné prend
-    juste plus de temps à répondre). Le vrai traitement en arrière-plan
-    avec notification viendra une fois ce flux de base validé.
-    """
-    note_content = f"{request.note_title}\n\n{request.note_content}"
-    build_prompt = _PROMPT_BUILDERS[request.format.value]
+        if len(raw_content) > 5000:
+            raw_content = ai_client.compress_long_text(raw_content)
 
-    prompt = build_prompt(note_content)
-    content = ai_client.generate(prompt, request.mode.value)
+        full_note = f"{request.note_title}\n\n{raw_content}"
+        build_prompt = _PROMPT_BUILDERS[request.format.value]
 
-    return GenerateResponse(document_id="local", status="pret", content=content)
+        prompt = build_prompt(full_note)
+        content = ai_client.generate(prompt, request.mode.value)
+
+        return GenerateResponse(document_id="local", status="pret", content=content)
+    except Exception as e:
+        # Renvoie une reponse 502 lisible par Flutter au lieu d'un crash 500 anonyme
+        raise HTTPException(status_code=502, detail=str(e))
