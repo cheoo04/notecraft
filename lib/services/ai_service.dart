@@ -1,12 +1,11 @@
+// lib/services/ai_service.dart
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/document.dart';
 import '../models/note.dart';
 
-/// Adresse du backend, réglable au lancement sans toucher au code :
-///   flutter run                                            → local (adb reverse)
-///   flutter run --dart-define=API_BASE_URL=https://ton-projet.vercel.app  → Vercel
 const _baseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'https://backend-beryl-two-39.vercel.app',
@@ -66,6 +65,8 @@ String _formatToJson(DocumentFormat format) {
       return 'plan_de_cours';
     case DocumentFormat.ficheDeRevision:
       return 'fiche_de_revision';
+    case DocumentFormat.flashcards:
+      return 'flashcards';
   }
 }
 
@@ -74,7 +75,6 @@ final dioProvider = Provider<Dio>((ref) {
     BaseOptions(
       baseUrl: _baseUrl,
       connectTimeout: const Duration(seconds: 10),
-      // Le mode affiné (deux passes côté backend) peut prendre du temps.
       receiveTimeout: const Duration(minutes: 3),
     ),
   );

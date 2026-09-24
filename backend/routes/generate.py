@@ -1,10 +1,19 @@
 # backend/routes/generate.py
 
+import json
+import re
 from fastapi import APIRouter, HTTPException
 
 from models.schemas import GenerateRequest, GenerateResponse
 from services import ai_client
-from services.prompts import expose, fiche_cornell, plan_de_cours, rapport, resume
+from services.prompts import (
+    expose,
+    fiche_cornell,
+    flashcards,
+    plan_de_cours,
+    rapport,
+    resume,
+)
 
 router = APIRouter()
 
@@ -14,6 +23,7 @@ _PROMPT_BUILDERS = {
     "expose": expose.build_prompt,
     "plan_de_cours": plan_de_cours.build_prompt,
     "fiche_de_revision": fiche_cornell.build_prompt,
+    "flashcards": flashcards.build_prompt,
 }
 
 
@@ -31,7 +41,12 @@ def generate_document(request: GenerateRequest):
         prompt = build_prompt(full_note)
         content = ai_client.generate(prompt, request.mode.value)
 
+        # Nettoyage si le format est flashcards pour garantir un JSON pur
+        if request.format.value == "flashcards":
+            match = re.search(r"\[.*\]", content, re.DOTALL)
+            if match:
+                content = match.group(0)
+
         return GenerateResponse(document_id="local", status="pret", content=content)
     except Exception as e:
-        # Renvoie une reponse 502 lisible par Flutter au lieu d'un crash 500 anonyme
         raise HTTPException(status_code=502, detail=str(e))

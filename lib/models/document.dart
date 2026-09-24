@@ -1,4 +1,13 @@
-enum DocumentFormat { resume, rapport, expose, planDeCours, ficheDeRevision }
+// lib/models/document.dart
+
+enum DocumentFormat {
+  resume,
+  rapport,
+  expose,
+  planDeCours,
+  ficheDeRevision,
+  flashcards,
+}
 
 enum GenerationMode { express, affine }
 
@@ -37,7 +46,8 @@ class GeneratedDocument {
       mode: mode,
       status: status,
       content: content ?? this.content,
-      cleanedSketchSvgPaths: cleanedSketchSvgPaths ?? this.cleanedSketchSvgPaths,
+      cleanedSketchSvgPaths:
+          cleanedSketchSvgPaths ?? this.cleanedSketchSvgPaths,
       createdAt: createdAt,
     );
   }
@@ -61,8 +71,7 @@ class GeneratedDocument {
         status: DocumentStatus.values.byName(map['status'] as String),
         content: map['content'] as String?,
         cleanedSketchSvgPaths:
-            (map['cleanedSketchSvgPaths'] as List?)?.cast<String>() ??
-                const [],
+            (map['cleanedSketchSvgPaths'] as List?)?.cast<String>() ?? const [],
         createdAt: DateTime.parse(map['createdAt'] as String),
       );
 }

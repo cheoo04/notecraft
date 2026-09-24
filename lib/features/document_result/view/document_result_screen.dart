@@ -11,6 +11,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/flashcard_deck_viewer.dart';
 import '../../../models/document.dart';
 import '../../../services/export_service.dart';
 import '../../../services/storage_service.dart';
@@ -150,6 +151,7 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
     final document = _document;
     final hasContent =
         document?.content != null && document!.content!.trim().isNotEmpty;
+    final isFlashcards = document?.format == DocumentFormat.flashcards;
 
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
@@ -268,7 +270,7 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                                   decoration: const InputDecoration(
                                     border: InputBorder.none,
                                     hintText:
-                                        'Contenu du document en Markdown...',
+                                        'Contenu du document en Markdown ou JSON...',
                                   ),
                                   style: Theme.of(context).textTheme.bodyLarge,
                                 ),
@@ -282,107 +284,113 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                          color: AppColors.neutralBorder),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.03),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
+                                  // Mode Flashcards interactif
+                                  if (isFlashcards) ...[
+                                    FlashcardDeckViewer(
+                                      rawJsonContent: document.content!,
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 4,
+                                  ] else ...[
+                                    // Mode Document standard
+                                    Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                            color: AppColors.neutralBorder),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black
+                                                .withValues(alpha: 0.03),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
                                           ),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.accentTealLight,
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            formatLabel(document.format)
-                                                .toUpperCase(),
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.accentTeal,
-                                              letterSpacing: 0.5,
+                                        ],
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.accentTealLight,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              formatLabel(document.format)
+                                                  .toUpperCase(),
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.accentTeal,
+                                                letterSpacing: 0.5,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(height: 16),
-
-                                        if (document.cleanedSketchSvgPaths
-                                            .isNotEmpty) ...[
-                                          for (final path
-                                              in document.cleanedSketchSvgPaths)
-                                            Container(
-                                              width: double.infinity,
-                                              margin: const EdgeInsets.only(
-                                                  bottom: 20),
-                                              padding: const EdgeInsets.all(16),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.canvasGrey,
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                border: Border.all(
-                                                  color:
-                                                      AppColors.neutralBorder,
+                                          const SizedBox(height: 16),
+                                          if (document.cleanedSketchSvgPaths
+                                              .isNotEmpty) ...[
+                                            for (final path in document
+                                                .cleanedSketchSvgPaths)
+                                              Container(
+                                                width: double.infinity,
+                                                margin: const EdgeInsets.only(
+                                                    bottom: 20),
+                                                padding:
+                                                    const EdgeInsets.all(16),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.canvasGrey,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                    color:
+                                                        AppColors.neutralBorder,
+                                                  ),
+                                                ),
+                                                child: Column(
+                                                  children: [
+                                                    SizedBox(
+                                                      height: 180,
+                                                      child: SvgPicture.file(
+                                                        File(path),
+                                                        fit: BoxFit.contain,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    const Text(
+                                                      'SCHÉMA VECTORISÉ RECONSTRUIT',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color:
+                                                            AppColors.textMuted,
+                                                        letterSpacing: 0.5,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                              child: Column(
-                                                children: [
-                                                  SizedBox(
-                                                    height: 180,
-                                                    child: SvgPicture.file(
-                                                      File(path),
-                                                      fit: BoxFit.contain,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  const Text(
-                                                    'SCHÉMA VECTORISÉ RECONSTRUIT',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color:
-                                                          AppColors.textMuted,
-                                                      letterSpacing: 0.5,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
+                                          ],
+                                          GptMarkdown(
+                                            document.content!,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyLarge
+                                                ?.copyWith(
+                                                  height: 1.6,
+                                                  fontSize: 14.5,
+                                                ),
+                                          ),
                                         ],
-
-                                        // Rendu direct sans scroll horizontal unconstrained
-                                        GptMarkdown(
-                                          document.content!,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyLarge
-                                              ?.copyWith(
-                                                height: 1.6,
-                                                fontSize: 14.5,
-                                              ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                   const SizedBox(height: 30),
                                 ],
                               ),

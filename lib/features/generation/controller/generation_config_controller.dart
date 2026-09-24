@@ -66,8 +66,14 @@ FormatMeta getFormatMeta(DocumentFormat format) {
     case DocumentFormat.ficheDeRevision:
       return const FormatMeta(
         label: 'Fiche Révision',
-        subtitle: 'Q/R & Points clés',
+        subtitle: 'Méthode Cornell & Q/R',
         icon: Icons.school_outlined,
+      );
+    case DocumentFormat.flashcards:
+      return const FormatMeta(
+        label: 'Flashcards & Quiz',
+        subtitle: 'Cartes mémo interactives',
+        icon: Icons.style_outlined,
       );
     case DocumentFormat.planDeCours:
       return const FormatMeta(

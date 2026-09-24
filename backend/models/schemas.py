@@ -10,6 +10,7 @@ class DocumentFormat(str, Enum):
     expose = "expose"
     plan_de_cours = "plan_de_cours"
     fiche_de_revision = "fiche_de_revision"
+    flashcards = "flashcards"
 
 
 class GenerationMode(str, Enum):
