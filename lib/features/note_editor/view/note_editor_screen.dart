@@ -77,15 +77,23 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     setState(() {});
   }
 
-  void _onToggleAudio() {
+  Future<void> _onToggleAudio() async {
     HapticFeedback.mediumImpact();
     final state = ref.read(noteEditorControllerProvider);
     final notifier = ref.read(noteEditorControllerProvider.notifier);
 
     if (state.isRecording) {
-      notifier.stopRecording();
+      await notifier.stopRecording();
     } else {
-      notifier.startRecording();
+      final success = await notifier.startRecording();
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Permission micro refusée ou enregistrement indisponible.'),
+          ),
+        );
+      }
     }
   }
 

@@ -1,7 +1,12 @@
 // lib/features/note_editor/controller/note_editor_controller.dart
 
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+
 import '../../../models/note.dart';
 import '../../settings/controller/settings_controller.dart';
 
@@ -68,10 +73,15 @@ class NoteEditorState {
 
 class NoteEditorController extends Notifier<NoteEditorState> {
   Timer? _recordingTimer;
+  final AudioRecorder _audioRecorder = AudioRecorder();
 
   @override
   NoteEditorState build() {
-    ref.onDispose(() => _recordingTimer?.cancel());
+    ref.onDispose(() {
+      _recordingTimer?.cancel();
+      _audioRecorder.dispose();
+    });
+
     final defaultSubject =
         ref.read(settingsControllerProvider).profile.favoriteSubject;
     return NoteEditorState(
@@ -113,35 +123,85 @@ class NoteEditorController extends Notifier<NoteEditorState> {
     );
   }
 
-  // Gestion du dictaphone audio (30 min max)
-  void startRecording() {
-    if (state.isRecording) return;
-    _recordingTimer?.cancel();
-    state = state.copyWith(isRecording: true, recordingSeconds: 0);
+  // Enregistrement reel avec le micro du telephone
+  Future<bool> startRecording() async {
+    if (state.isRecording) return false;
 
-    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (state.recordingSeconds >= 1800) {
-        stopRecording();
+    // 1. Demande de permission micro
+    final hasPermission = await _audioRecorder.hasPermission();
+    if (!hasPermission) return false;
+
+    _recordingTimer?.cancel();
+
+    try {
+      // 2. Creation d'un vrai fichier dans le dossier documents de l'application
+      final dir = await getApplicationDocumentsDirectory();
+      final filePath =
+          '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      // 3. Demarrage de l'enregistrement en AAC (.m4a)
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000),
+        path: filePath,
+      );
+
+      state = state.copyWith(
+        isRecording: true,
+        recordingSeconds: 0,
+      );
+
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (state.recordingSeconds >= 1800) {
+          stopRecording();
+        } else {
+          state = state.copyWith(recordingSeconds: state.recordingSeconds + 1);
+        }
+      });
+
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> stopRecording() async {
+    _recordingTimer?.cancel();
+
+    try {
+      // Arrete l'enregistreur et recupere le chemin reel du fichier audio
+      final realPath = await _audioRecorder.stop();
+      final duration = Duration(seconds: state.recordingSeconds);
+
+      if (realPath != null && await File(realPath).exists()) {
+        state = state.copyWith(
+          isRecording: false,
+          audioPath: realPath,
+          audioDuration: duration,
+        );
       } else {
-        state = state.copyWith(recordingSeconds: state.recordingSeconds + 1);
+        state = state.copyWith(isRecording: false);
       }
-    });
+    } catch (_) {
+      state = state.copyWith(isRecording: false);
+    }
   }
 
-  void stopRecording() {
+  Future<void> deleteAudio() async {
     _recordingTimer?.cancel();
-    final duration = Duration(seconds: state.recordingSeconds);
-    final mockAudioPath =
-        'audio_record_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    state = state.copyWith(
-      isRecording: false,
-      audioPath: mockAudioPath,
-      audioDuration: duration,
-    );
-  }
 
-  void deleteAudio() {
-    _recordingTimer?.cancel();
+    if (state.isRecording) {
+      await _audioRecorder.stop();
+    }
+
+    if (state.audioPath != null) {
+      try {
+        final file = File(state.audioPath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+
     state = state.copyWith(
       isRecording: false,
       recordingSeconds: 0,
