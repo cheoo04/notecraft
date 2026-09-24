@@ -1,9 +1,11 @@
-import 'package:universal_io/io.dart';
+// lib/services/export_service.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:universal_io/io.dart';
 
 import '../features/generation/controller/generation_config_controller.dart';
 import '../models/document.dart';
@@ -11,20 +13,20 @@ import '../models/document.dart';
 enum ExportFormat { pdf, word, svg }
 
 abstract class ExportService {
-  /// PDF généré nativement côté Flutter (package `pdf`).
-  /// Retourne le chemin du fichier sauvegardé.
+  /// Genere les octets PDF directement en memoire (compatible Web et Mobile)
+  Future<Uint8List> generatePdfBytes(GeneratedDocument document);
+
+  /// Sauvegarde locale pour mobile
   Future<String> exportToPdf(GeneratedDocument document);
 
-  /// Word généré côté backend (python-docx), plus fiable que les libs Dart.
   Future<String> exportToWord(GeneratedDocument document);
 
-  /// Export des schémas nettoyés en SVG.
   Future<List<String>> exportSketchesToSvg(GeneratedDocument document);
 }
 
 class ExportServiceImpl implements ExportService {
   @override
-  Future<String> exportToPdf(GeneratedDocument document) async {
+  Future<Uint8List> generatePdfBytes(GeneratedDocument document) async {
     final pdf = pw.Document();
     var content = document.content ?? '';
 
@@ -60,15 +62,22 @@ class ExportServiceImpl implements ExportService {
       ),
     );
 
+    return await pdf.save();
+  }
+
+  @override
+  Future<String> exportToPdf(GeneratedDocument document) async {
+    final bytes = await generatePdfBytes(document);
+    if (kIsWeb) return '';
+
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/notecraft_${document.id}.pdf');
-    await file.writeAsBytes(await pdf.save());
+    await file.writeAsBytes(bytes);
     return file.path;
   }
 
   @override
   Future<String> exportToWord(GeneratedDocument document) {
-    // Génération .docx via python-docx planifiée pour la V2
     throw UnsupportedError(
         'L\'export Word sera disponible dans la prochaine version.');
   }
@@ -78,22 +87,6 @@ class ExportServiceImpl implements ExportService {
     return Future.value(document.cleanedSketchSvgPaths);
   }
 }
-
-// ---------------------------------------------------------------------
-// Rendu Markdown → PDF (V1, volontairement simple)
-// ---------------------------------------------------------------------
-//
-// Gère : titres #/##/###, lignes entièrement en **gras** (titres de
-// section), **gras** en ligne, puces -/*, séparateurs ---, et les blocs
-// de formules \[ ... \] (voir section "Mini-LaTeX" plus bas).
-//
-// Non géré, honnêtement : LaTeX inline \( ... \), symboles grecs
-// (\alpha etc. — affichés tels quels, sans le backslash), matrices,
-// italique/souligné isolé hors gras. Exposants/indices sont approximés
-// par une taille de police réduite (pas de vrai décalage de ligne de
-// base dans package:pdf) plutôt que par des caractères Unicode
-// exposant/indice, qui ne sont pas couverts par les polices intégrées
-// et s'afficheraient en carrés noirs.
 
 List<pw.Widget> _buildMarkdownLite(String content) {
   final widgets = <pw.Widget>[];
@@ -150,8 +143,6 @@ List<pw.Widget> _buildTextLines(String content) {
       continue;
     }
 
-    // Une ligne entièrement en **gras** (souvent utilisée comme titre de
-    // section dans nos prompts) est traitée comme un sous-titre.
     final boldLineMatch = RegExp(r'^\*\*(.+)\*\*:?$').firstMatch(line.trim());
     if (boldLineMatch != null) {
       widgets.add(pw.Padding(
@@ -172,7 +163,7 @@ List<pw.Widget> _buildTextLines(String content) {
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('•  '),
+            pw.Text('*  '),
             pw.Expanded(child: _inlineText(bulletMatch.group(1)!)),
           ],
         ),
@@ -189,8 +180,6 @@ List<pw.Widget> _buildTextLines(String content) {
   return widgets;
 }
 
-/// Gère le **gras** en ligne (pas d'italique/imbrication pour rester
-/// simple) en découpant le texte en segments normaux/gras.
 pw.Widget _inlineText(String text) {
   final spans = <pw.TextSpan>[];
   final pattern = RegExp(r'\*\*(.+?)\*\*');
@@ -214,15 +203,6 @@ pw.Widget _inlineText(String text) {
     text: pw.TextSpan(style: const pw.TextStyle(fontSize: 11), children: spans),
   );
 }
-
-// ---------------------------------------------------------------------
-// Mini-LaTeX (formules en mode bloc \[ ... \])
-// ---------------------------------------------------------------------
-//
-// Gère : \frac{...}{...} (vraie fraction, ligne + numérateur/dénominateur
-// empilés), exposants ^, indices _, \text{...} (texte affiché tel quel).
-// Toute autre commande inconnue (\alpha, \sum, ...) est affichée sans son
-// backslash, en repli, plutôt que de faire échouer l'export.
 
 sealed class _MathNode {}
 
@@ -273,7 +253,7 @@ List<_MathNode> _parseMath(String src) {
         if (depth > 0) i++;
       }
       final inner = src.substring(start, i);
-      if (i < src.length) i++; // consomme le '}' final
+      if (i < src.length) i++;
       return inner;
     } else if (i < src.length) {
       final c = src[i];
@@ -296,8 +276,6 @@ List<_MathNode> _parseMath(String src) {
       final cmd = src.substring(cmdStart, i);
 
       if (cmd.isEmpty) {
-        // Commande d'un seul caractère non-lettre (ex. "\\", "\,") :
-        // on consomme ce caractère et on l'ignore plutôt que de planter.
         if (i < src.length) i++;
         continue;
       }
@@ -313,7 +291,6 @@ List<_MathNode> _parseMath(String src) {
       } else if (cmd == 'text' || cmd == 'mathrm' || cmd == 'mathbf') {
         nodes.add(_MathText(readGroupOrChar()));
       } else {
-        // Commande inconnue : repli, affichée sans le backslash.
         nodes.add(_MathText(cmd));
       }
     } else if (c == '^') {
@@ -325,7 +302,6 @@ List<_MathNode> _parseMath(String src) {
       i++;
       nodes.add(_MathSub(_parseMath(readGroupOrChar())));
     } else if (c == '{' || c == '}') {
-      // Accolade isolée (LaTeX mal formé) : ignorée pour rester robuste.
       i++;
     } else {
       buffer.write(c);
@@ -389,10 +365,6 @@ pw.Widget _renderMathNode(_MathNode node, double fontSize) {
   return pw.SizedBox();
 }
 
-/// Optimisation : si un groupe (numérateur, dénominateur, exposant...) ne
-/// contient que du texte simple, on le rend en un seul `pw.Text` centré
-/// plutôt qu'en `Wrap` — plus fiable pour le centrage sur les fractions
-/// longues (ex. fractions de texte comme dans les formules de chimie).
 pw.Widget _renderMathGroup(List<_MathNode> nodes, double fontSize) {
   if (nodes.isEmpty) return pw.SizedBox();
   if (nodes.every((n) => n is _MathText)) {

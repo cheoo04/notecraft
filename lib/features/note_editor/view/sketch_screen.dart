@@ -35,8 +35,8 @@ class _SketchStroke {
 }
 
 class _SketchLabel {
-  final String text;
-  final Offset position;
+  String text;
+  Offset position;
   _SketchLabel(this.text, this.position);
 
   Map<String, dynamic> toJson() => {
@@ -52,6 +52,12 @@ class _SketchLabel {
           (json['y'] as num).toDouble(),
         ),
       );
+
+  Rect getBounds() {
+    // Estimation de la zone tactile de l'etiquette pour le deplacement
+    final width = text.length * 9.5 + 24;
+    return Rect.fromLTWH(position.dx - 8, position.dy - 8, width, 36);
+  }
 }
 
 class SketchScreen extends StatefulWidget {
@@ -69,6 +75,9 @@ class _SketchScreenState extends State<SketchScreen> {
   final List<_SketchLabel> _labels = [];
 
   SketchTool _currentTool = SketchTool.pen;
+  _SketchLabel? _draggedLabel;
+  Offset _dragDelta = Offset.zero;
+
   bool _saving = false;
   bool _loading = true;
   late final String _id;
@@ -118,9 +127,23 @@ class _SketchScreenState extends State<SketchScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
+  _SketchLabel? _findLabelAt(Offset point) {
+    for (int i = _labels.length - 1; i >= 0; i--) {
+      if (_labels[i].getBounds().contains(point)) {
+        return _labels[i];
+      }
+    }
+    return null;
+  }
+
   void _onPanStart(DragStartDetails details) {
     if (_currentTool == SketchTool.text) {
-      _promptAddText(details.localPosition);
+      final touchedLabel = _findLabelAt(details.localPosition);
+      if (touchedLabel != null) {
+        HapticFeedback.selectionClick();
+        _draggedLabel = touchedLabel;
+        _dragDelta = details.localPosition - touchedLabel.position;
+      }
       return;
     }
 
@@ -135,13 +158,36 @@ class _SketchScreenState extends State<SketchScreen> {
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
-    if (_currentTool == SketchTool.text) return;
+    if (_currentTool == SketchTool.text) {
+      if (_draggedLabel != null) {
+        setState(() {
+          _draggedLabel!.position = details.localPosition - _dragDelta;
+        });
+      }
+      return;
+    }
+
     setState(() {
       _strokes.last.points.add(details.localPosition);
     });
   }
 
-  void _promptAddText(Offset position) {
+  void _onPanEnd(DragEndDetails details) {
+    _draggedLabel = null;
+  }
+
+  void _onTapCanvas(TapUpDetails details) {
+    if (_currentTool != SketchTool.text) return;
+
+    final touchedLabel = _findLabelAt(details.localPosition);
+    if (touchedLabel != null) {
+      _showEditLabelDialog(touchedLabel);
+    } else {
+      _showCreateLabelDialog(details.localPosition);
+    }
+  }
+
+  void _showCreateLabelDialog(Offset position) {
     final textController = TextEditingController();
     showDialog(
       context: context,
@@ -149,14 +195,14 @@ class _SketchScreenState extends State<SketchScreen> {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
-          'Ajouter une étiquette / texte',
+          'Nouveau texte / étiquette',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         content: TextField(
           controller: textController,
           autofocus: true,
           decoration: const InputDecoration(
-            hintText: 'Ex: Capteur IoT, Tri rapide, Nœud A...',
+            hintText: 'Ex: Routeur, Capteur, Nœud A...',
             border: OutlineInputBorder(),
           ),
         ),
@@ -175,7 +221,51 @@ class _SketchScreenState extends State<SketchScreen> {
               }
               Navigator.pop(context);
             },
-            child: const Text('Placer le texte'),
+            child: const Text('Placer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditLabelDialog(_SketchLabel label) {
+    final textController = TextEditingController(text: label.text);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Modifier l\'étiquette',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            onPressed: () {
+              setState(() {
+                _labels.remove(label);
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Supprimer'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = textController.text.trim();
+              if (text.isNotEmpty) {
+                setState(() {
+                  label.text = text;
+                });
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Enregistrer'),
           ),
         ],
       ),
@@ -251,7 +341,6 @@ class _SketchScreenState extends State<SketchScreen> {
               : 'Modifier le schéma',
         ),
         actions: [
-          // Outil Crayon
           IconButton(
             icon: Icon(
               Icons.draw_outlined,
@@ -259,10 +348,9 @@ class _SketchScreenState extends State<SketchScreen> {
                   ? AppColors.accentTeal
                   : AppColors.textMuted,
             ),
-            tooltip: 'Tracé libre',
+            tooltip: 'Crayon (tracé libre)',
             onPressed: () => setState(() => _currentTool = SketchTool.pen),
           ),
-          // Outil Texte Clavier
           IconButton(
             icon: Icon(
               Icons.text_fields_outlined,
@@ -270,10 +358,9 @@ class _SketchScreenState extends State<SketchScreen> {
                   ? AppColors.accentTeal
                   : AppColors.textMuted,
             ),
-            tooltip: 'Ajouter du texte au clavier',
+            tooltip: 'Texte (toucher pour placer ou glisser pour déplacer)',
             onPressed: () => setState(() => _currentTool = SketchTool.text),
           ),
-          // Outil Gomme
           IconButton(
             icon: Icon(
               Icons.auto_fix_normal,
@@ -284,19 +371,16 @@ class _SketchScreenState extends State<SketchScreen> {
             tooltip: 'Gomme',
             onPressed: () => setState(() => _currentTool = SketchTool.eraser),
           ),
-          // Annuler
           IconButton(
             icon: const Icon(Icons.undo),
             tooltip: 'Annuler',
             onPressed: (_strokes.isEmpty && _labels.isEmpty) ? null : _undo,
           ),
-          // Tout effacer
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Tout effacer',
             onPressed: (_strokes.isEmpty && _labels.isEmpty) ? null : _clear,
           ),
-          // Terminer / Sauvegarder
           _saving
               ? const Padding(
                   padding: EdgeInsets.all(16),
@@ -322,10 +406,13 @@ class _SketchScreenState extends State<SketchScreen> {
           child: GestureDetector(
             onPanStart: _onPanStart,
             onPanUpdate: _onPanUpdate,
+            onPanEnd: _onPanEnd,
+            onTapUp: _onTapCanvas,
             child: CustomPaint(
               painter: _CombinedSketchPainter(
                 strokes: _strokes,
                 labels: _labels,
+                isTextMode: _currentTool == SketchTool.text,
               ),
               size: Size.infinite,
             ),
@@ -339,8 +426,13 @@ class _SketchScreenState extends State<SketchScreen> {
 class _CombinedSketchPainter extends CustomPainter {
   final List<_SketchStroke> strokes;
   final List<_SketchLabel> labels;
+  final bool isTextMode;
 
-  _CombinedSketchPainter({required this.strokes, required this.labels});
+  _CombinedSketchPainter({
+    required this.strokes,
+    required this.labels,
+    required this.isTextMode,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -356,7 +448,7 @@ class _CombinedSketchPainter extends CustomPainter {
       }
     }
 
-    // 2. Dessine les étiquettes de texte tapées au clavier
+    // 2. Dessine les etiquettes de texte
     for (final label in labels) {
       final textSpan = TextSpan(
         text: label.text,
@@ -371,17 +463,30 @@ class _CombinedSketchPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
 
-      // Dessine un petit fond blanc discret sous le texte pour la lisibilité
       final bgRect = Rect.fromLTWH(
-        label.position.dx - 4,
-        label.position.dy - 2,
-        textPainter.width + 8,
-        textPainter.height + 4,
+        label.position.dx - 6,
+        label.position.dy - 3,
+        textPainter.width + 12,
+        textPainter.height + 6,
       );
+
+      // Fond blanc doux sous le texte pour detacher du trace
       canvas.drawRRect(
-        RRect.fromRectAndRadius(bgRect, const Radius.circular(4)),
-        Paint()..color = Colors.white.withValues(alpha: 0.9),
+        RRect.fromRectAndRadius(bgRect, const Radius.circular(6)),
+        Paint()..color = Colors.white.withValues(alpha: 0.95),
       );
+
+      // Si l'utilisateur est en mode texte, on dessine une bordure fine
+      // pour indiquer visuellement que l'etiquette est saisissable et deplacable
+      if (isTextMode) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(bgRect, const Radius.circular(6)),
+          Paint()
+            ..color = AppColors.accentTeal.withValues(alpha: 0.6)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1,
+        );
+      }
 
       textPainter.paint(canvas, label.position);
     }

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:printing/printing.dart';
-import 'package:universal_io/io.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_svg_viewer.dart';
@@ -119,9 +118,14 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
     HapticFeedback.mediumImpact();
     setState(() => _exporting = true);
     try {
-      final path = await ref.read(exportServiceProvider).exportToPdf(current);
-      final bytes = await File(path).readAsBytes();
+      final exportService = ref.read(exportServiceProvider);
+      // Generation en memoire vive : compatible Web et Mobile
+      final bytes = await exportService.generatePdfBytes(current);
+
       if (!mounted) return;
+
+      // Sur Web : declenche le telechargement dans le navigateur
+      // Sur Mobile : ouvre le panneau de partage natif
       await Printing.sharePdf(
         bytes: bytes,
         filename: 'notecraft_${current.id}.pdf',
