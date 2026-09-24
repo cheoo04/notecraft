@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:printing/printing.dart';
 
@@ -64,6 +65,43 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
     }
   }
 
+  Future<void> _confirmDelete() async {
+    final current = _document;
+    if (current == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Supprimer ce document ?',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: const Text(
+          'Cette synthèse sera définitivement supprimée. Le cours brut restera conservé.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(storageServiceProvider).deleteDocument(current.id);
+      if (!mounted) return;
+      context.pop();
+    }
+  }
+
   void _startEditing() {
     HapticFeedback.selectionClick();
     _editController.text = _document?.content ?? '';
@@ -102,7 +140,7 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
     HapticFeedback.selectionClick();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Export Word (.docx) : fonctionnalité prévue en V2'),
+        content: Text('Export Word (.docx) : prévu en V2'),
       ),
     );
   }
@@ -110,6 +148,8 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
   @override
   Widget build(BuildContext context) {
     final document = _document;
+    final hasContent =
+        document?.content != null && document!.content!.trim().isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
@@ -118,146 +158,219 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
           document != null ? formatLabel(document.format) : 'Document généré',
         ),
         actions: [
-          if (document?.content != null && !_editing)
+          if (document != null) ...[
+            if (hasContent && !_editing)
+              IconButton(
+                icon: const Icon(Icons.share_outlined),
+                tooltip: 'Partager le document',
+                onPressed: _exportPdf,
+              ),
             IconButton(
-              icon: const Icon(Icons.share_outlined),
-              tooltip: 'Partager le document',
-              onPressed: _exportPdf,
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              tooltip: 'Supprimer ce document',
+              onPressed: _confirmDelete,
             ),
+          ],
         ],
       ),
-      body: document?.content == null
-          ? const Center(child: Text('Aucun document reçu'))
-          : Column(
-              children: [
-                Expanded(
-                  child: _editing
-                      ? Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border:
-                                  Border.all(color: AppColors.neutralBorder),
-                            ),
-                            padding: const EdgeInsets.all(16),
-                            child: TextField(
-                              controller: _editController,
-                              maxLines: null,
-                              expands: true,
-                              textAlignVertical: TextAlignVertical.top,
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                hintText: 'Contenu du document en Markdown...',
-                              ),
-                              style: Theme.of(context).textTheme.bodyLarge,
+      body: document == null
+          ? const Center(child: Text('Aucun document trouvé'))
+          : !hasContent
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.neutralBorder),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            size: 48,
+                            color: Colors.orangeAccent,
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Génération incomplète ou vide',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.inkDark,
                             ),
                           ),
-                        )
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Ce document n\'a pas pu être finalisé par l\'IA.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textMuted,
+                            ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                          const SizedBox(height: 20),
+                          Row(
                             children: [
-                              // Feuille de document universitaire (Diapositive 7)
-                              Container(
-                                padding: const EdgeInsets.all(20),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _confirmDelete,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.redAccent,
+                                    side: const BorderSide(
+                                        color: Colors.redAccent),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  child: const Text('Supprimer'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () => context.pop(),
+                                  child: const Text('Retour'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: _editing
+                          ? Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
                                       color: AppColors.neutralBorder),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.03),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Badge supérieur
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.accentTealLight,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        'MÉTHODE CORNELL • FICHE OFFICIELLE',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppColors.accentTeal,
-                                          letterSpacing: 0.5,
+                                padding: const EdgeInsets.all(16),
+                                child: TextField(
+                                  controller: _editController,
+                                  maxLines: null,
+                                  expands: true,
+                                  textAlignVertical: TextAlignVertical.top,
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    hintText:
+                                        'Contenu du document en Markdown...',
+                                  ),
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                              ),
+                            )
+                          : SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                          color: AppColors.neutralBorder),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.03),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 16),
-
-                                    // Schémas vectorisés joints
-                                    if (document!
-                                        .cleanedSketchSvgPaths.isNotEmpty) ...[
-                                      for (final path
-                                          in document.cleanedSketchSvgPaths)
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
                                         Container(
-                                          width: double.infinity,
-                                          margin:
-                                              const EdgeInsets.only(bottom: 20),
-                                          padding: const EdgeInsets.all(16),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: AppColors.canvasGrey,
+                                            color: AppColors.accentTealLight,
                                             borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: AppColors.neutralBorder,
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            formatLabel(document.format)
+                                                .toUpperCase(),
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.accentTeal,
+                                              letterSpacing: 0.5,
                                             ),
                                           ),
-                                          child: Column(
-                                            children: [
-                                              SizedBox(
-                                                height: 180,
-                                                child: SvgPicture.file(
-                                                  File(path),
-                                                  fit: BoxFit.contain,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              const Text(
-                                                'SCHÉMA VECTORISÉ RECONSTRUIT',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: AppColors.textMuted,
-                                                  letterSpacing: 0.5,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
                                         ),
-                                    ],
+                                        const SizedBox(height: 16),
 
-                                    // Contenu Markdown enrichi
-                                    SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: ConstrainedBox(
-                                        constraints: BoxConstraints(
-                                          minWidth: MediaQuery.of(context)
-                                                  .size
-                                                  .width -
-                                              72,
-                                        ),
-                                        child: GptMarkdown(
+                                        if (document.cleanedSketchSvgPaths
+                                            .isNotEmpty) ...[
+                                          for (final path
+                                              in document.cleanedSketchSvgPaths)
+                                            Container(
+                                              width: double.infinity,
+                                              margin: const EdgeInsets.only(
+                                                  bottom: 20),
+                                              padding: const EdgeInsets.all(16),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.canvasGrey,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color:
+                                                      AppColors.neutralBorder,
+                                                ),
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  SizedBox(
+                                                    height: 180,
+                                                    child: SvgPicture.file(
+                                                      File(path),
+                                                      fit: BoxFit.contain,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  const Text(
+                                                    'SCHÉMA VECTORISÉ RECONSTRUIT',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color:
+                                                          AppColors.textMuted,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+
+                                        // Rendu Markdown sans contrainte non bornee
+                                        GptMarkdown(
                                           document.content!,
                                           style: Theme.of(context)
                                               .textTheme
@@ -267,168 +380,170 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                                                 fontSize: 14.5,
                                               ),
                                         ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 30),
+                                ],
+                              ),
+                            ),
+                    ),
+
+                    // Barre d'actions basse (PDF, Word, Editer)
+                    Container(
+                      padding: EdgeInsets.only(
+                        top: 12,
+                        bottom: MediaQuery.of(context).padding.bottom > 0
+                            ? MediaQuery.of(context).padding.bottom
+                            : 12,
+                        left: 20,
+                        right: 20,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          top: BorderSide(
+                              color: AppColors.neutralBorder, width: 1),
+                        ),
+                      ),
+                      child: _editing
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: _cancelEditing,
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      side: const BorderSide(
+                                          color: AppColors.neutralBorder),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                  ],
+                                    child: const Text(
+                                      'Annuler',
+                                      style:
+                                          TextStyle(color: AppColors.inkDark),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 30),
-                            ],
-                          ),
-                        ),
-                ),
-
-                // Barre d'actions inférieure
-                Container(
-                  padding: EdgeInsets.only(
-                    top: 12,
-                    bottom: MediaQuery.of(context).padding.bottom > 0
-                        ? MediaQuery.of(context).padding.bottom
-                        : 12,
-                    left: 20,
-                    right: 20,
-                  ),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    border: Border(
-                      top: BorderSide(color: AppColors.neutralBorder, width: 1),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: _saving ? null : _save,
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    child: _saving
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Enregistrer',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w700),
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: _exporting ? null : _exportPdf,
+                                    icon: _exporting
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : const Icon(
+                                            Icons.picture_as_pdf_outlined,
+                                            size: 18,
+                                            color: AppColors.accentTeal,
+                                          ),
+                                    label: const Text(
+                                      'PDF',
+                                      style: TextStyle(
+                                        color: AppColors.inkDark,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      side: const BorderSide(
+                                          color: AppColors.neutralBorder),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: _exportWord,
+                                    icon: const Icon(
+                                      Icons.description_outlined,
+                                      size: 18,
+                                      color: Color(0xFF2563EB),
+                                    ),
+                                    label: const Text(
+                                      'Word',
+                                      style: TextStyle(
+                                        color: AppColors.inkDark,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      side: const BorderSide(
+                                          color: AppColors.neutralBorder),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _startEditing,
+                                    icon: const Icon(Icons.edit_outlined,
+                                        size: 18),
+                                    label: const Text(
+                                      'Éditer',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
-                  ),
-                  child: _editing
-                      ? Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _cancelEditing,
-                                style: OutlinedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  side: const BorderSide(
-                                      color: AppColors.neutralBorder),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Annuler',
-                                  style: TextStyle(color: AppColors.inkDark),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _saving ? null : _save,
-                                style: ElevatedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                child: _saving
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Text(
-                                        'Enregistrer',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w700),
-                                      ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _exporting ? null : _exportPdf,
-                                icon: _exporting
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Icon(
-                                        Icons.picture_as_pdf_outlined,
-                                        size: 18,
-                                        color: AppColors.accentTeal,
-                                      ),
-                                label: const Text(
-                                  'PDF',
-                                  style: TextStyle(
-                                    color: AppColors.inkDark,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  side: const BorderSide(
-                                      color: AppColors.neutralBorder),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _exportWord,
-                                icon: const Icon(
-                                  Icons.description_outlined,
-                                  size: 18,
-                                  color: Color(0xFF2563EB),
-                                ),
-                                label: const Text(
-                                  'Word',
-                                  style: TextStyle(
-                                    color: AppColors.inkDark,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  side: const BorderSide(
-                                      color: AppColors.neutralBorder),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _startEditing,
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                label: const Text(
-                                  'Éditer',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                  ],
                 ),
-              ],
-            ),
     );
   }
 }

@@ -13,6 +13,7 @@ import '../../../models/document.dart';
 import '../../../models/note.dart';
 import '../../../services/storage_service.dart';
 import '../../generation/controller/generation_config_controller.dart';
+import '../../home/controller/home_controller.dart';
 
 class NoteDetailScreen extends ConsumerWidget {
   final Note note;
@@ -49,12 +50,61 @@ class NoteDetailScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _confirmDeleteNote(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Supprimer cette note ?',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: const Text(
+          'Cette action supprimera le cours ainsi que tous les documents générés rattachés.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(storageServiceProvider).deleteNote(note.id);
+      await ref.read(homeControllerProvider.notifier).loadNotes();
+      if (!context.mounted) return;
+      context.pop();
+    }
+  }
+
+  Future<void> _deleteDocument(WidgetRef ref, String docId) async {
+    HapticFeedback.lightImpact();
+    await ref.read(storageServiceProvider).deleteDocument(docId);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final docsAsync = ref.watch(documentsStreamProvider(note.id));
+
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
       appBar: AppBar(
         title: const Text('Détail de la note'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            tooltip: 'Supprimer cette note',
+            onPressed: () => _confirmDeleteNote(context, ref),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -62,7 +112,7 @@ class NoteDetailScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Carte "Brouillon Source"
+              // 1. Carte Brouillon Source
               Material(
                 color: Colors.white,
                 shape: RoundedRectangleBorder(
@@ -75,7 +125,6 @@ class NoteDetailScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Badge Matière + Date
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -108,8 +157,6 @@ class NoteDetailScreen extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-
-                      // Titre du cours
                       Text(
                         note.title,
                         style: const TextStyle(
@@ -119,8 +166,6 @@ class NoteDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-
-                      // Contenu brut
                       if (note.rawText != null &&
                           note.rawText!.trim().isNotEmpty) ...[
                         Container(
@@ -141,8 +186,6 @@ class NoteDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
-
-                      // Aperçu des schémas attachés
                       if (note.rawSketchPaths.isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Row(
@@ -191,8 +234,6 @@ class NoteDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
-
-                      // Badge Audio si présent
                       if (note.audioPath != null) ...[
                         const SizedBox(height: 12),
                         Container(
@@ -232,41 +273,25 @@ class NoteDetailScreen extends ConsumerWidget {
 
               const SizedBox(height: 24),
 
-              // 2. En-tête Section "Documents générés"
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Documents générés',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ],
+              // 2. Section Documents generes avec Stream temps reel
+              Text(
+                'Documents générés',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
               const SizedBox(height: 12),
 
-              // 3. Liste des documents générés
-              FutureBuilder<List<GeneratedDocument>>(
-                future: ref
-                    .read(storageServiceProvider)
-                    .getDocumentsForNote(note.id),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator(
-                            color: AppColors.accentTeal),
-                      ),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Erreur : ${snapshot.error}'));
-                  }
-
-                  final documents = snapshot.data ?? const [];
-
+              docsAsync.when(
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child:
+                        CircularProgressIndicator(color: AppColors.accentTeal),
+                  ),
+                ),
+                error: (err, _) => Center(child: Text('Erreur : $err')),
+                data: (documents) {
                   if (documents.isEmpty) {
                     return Container(
                       padding: const EdgeInsets.symmetric(
@@ -292,15 +317,6 @@ class NoteDetailScreen extends ConsumerWidget {
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: AppColors.inkDark,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Choisis un format pour créer ta première fiche de révision, résumé ou rapport.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
                             ),
                           ),
                         ],
@@ -364,30 +380,15 @@ class NoteDetailScreen extends ConsumerWidget {
                                           : AppColors.accentTealLight,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          isExpress
-                                              ? Icons.bolt
-                                              : Icons.auto_awesome,
-                                          size: 12,
-                                          color: isExpress
-                                              ? AppColors.textMuted
-                                              : AppColors.accentTeal,
-                                        ),
-                                        const SizedBox(width: 3),
-                                        Text(
-                                          isExpress ? 'Express' : 'Affiné',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: isExpress
-                                                ? AppColors.textMuted
-                                                : AppColors.accentTeal,
-                                          ),
-                                        ),
-                                      ],
+                                    child: Text(
+                                      isExpress ? 'Express' : 'Affiné',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: isExpress
+                                            ? AppColors.textMuted
+                                            : AppColors.accentTeal,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
@@ -401,10 +402,21 @@ class NoteDetailScreen extends ConsumerWidget {
                                 ],
                               ),
                             ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.textMuted,
-                              size: 20,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 20, color: Colors.grey),
+                                  tooltip: 'Supprimer ce document',
+                                  onPressed: () => _deleteDocument(ref, doc.id),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: AppColors.textMuted,
+                                  size: 20,
+                                ),
+                              ],
                             ),
                             onTap: () {
                               HapticFeedback.selectionClick();

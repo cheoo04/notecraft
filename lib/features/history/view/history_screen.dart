@@ -154,35 +154,29 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final notesAsync = ref.watch(notesStreamProvider);
+
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
       appBar: AppBar(
         title: const Text('Historique des Notes'),
       ),
       body: SafeArea(
-        child: FutureBuilder<List<Note>>(
-          future: ref.read(storageServiceProvider).getNotes(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: AppColors.accentTeal),
-              );
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text('Erreur de chargement : ${snapshot.error}'),
-                ),
-              );
-            }
-
-            final allNotes = snapshot.data ?? const [];
+        child: notesAsync.when(
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: AppColors.accentTeal),
+          ),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Erreur de chargement : $err'),
+            ),
+          ),
+          data: (allNotes) {
             if (allNotes.isEmpty) {
               return const Center(child: Text('Aucune note enregistrée'));
             }
 
-            // Extraction des matières uniques
             final subjects = <String>{'Toutes'};
             for (final n in allNotes) {
               if (n.subject.isNotEmpty && n.subject != 'Général') {
@@ -196,7 +190,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
             return Column(
               children: [
-                // Filtre par matière (Pills horizontales)
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   padding:
@@ -242,8 +235,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     }).toList(),
                   ),
                 ),
-
-                // Liste des cartes d'historique
                 Expanded(
                   child: ListView.builder(
                     padding:
@@ -260,8 +251,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     },
                   ),
                 ),
-
-                // Bannière basse de régénération cliquable (Slide 8)
                 Material(
                   color: Colors.white,
                   child: InkWell(
@@ -345,6 +334,8 @@ class _HistoryNoteCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final docsAsync = ref.watch(documentsStreamProvider(note.id));
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -400,12 +391,10 @@ class _HistoryNoteCard extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                FutureBuilder<List<GeneratedDocument>>(
-                  future: ref
-                      .read(storageServiceProvider)
-                      .getDocumentsForNote(note.id),
-                  builder: (context, snapshot) {
-                    final docs = snapshot.data ?? const [];
+                docsAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (docs) {
                     if (docs.isEmpty) {
                       return const Text(
                         'Aucun document généré',
