@@ -79,7 +79,7 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
         ),
         content: const Text(
-          'Cette synthèse sera définitivement supprimée. Le cours brut restera conservé.',
+          'Cette synthèse sera définitivement supprimée. Le cours brut d\'origine restera conservé.',
         ),
         actions: [
           TextButton(
@@ -369,7 +369,7 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                                             ),
                                         ],
 
-                                        // Rendu Markdown sans contrainte non bornee
+                                        // Rendu direct sans scroll horizontal unconstrained
                                         GptMarkdown(
                                           document.content!,
                                           style: Theme.of(context)
@@ -389,7 +389,7 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                             ),
                     ),
 
-                    // Barre d'actions basse (PDF, Word, Editer)
+                    // Barre d'actions basse fixe
                     Container(
                       padding: EdgeInsets.only(
                         top: 12,

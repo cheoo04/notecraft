@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_format_helper.dart';
-import '../../../models/document.dart';
 import '../../../models/note.dart';
 import '../../../services/storage_service.dart';
 import '../../generation/controller/generation_config_controller.dart';

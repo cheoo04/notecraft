@@ -1,5 +1,6 @@
 // lib/features/home/controller/home_controller.dart
 
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/note.dart';
 import '../../../services/storage_service.dart';
@@ -36,7 +37,6 @@ class HomeState {
   List<Note> get filteredNotes {
     var notes = allNotes;
 
-    // Filtre par recherche texte
     if (searchQuery.trim().isNotEmpty) {
       final query = searchQuery.toLowerCase();
       notes = notes.where((n) {
@@ -47,7 +47,6 @@ class HomeState {
       }).toList();
     }
 
-    // Filtre par méthode / modalité
     switch (selectedFilter) {
       case NoteFilterType.audio:
         notes = notes.where((n) => n.audioPath != null).toList();
@@ -71,15 +70,25 @@ class HomeState {
 }
 
 class HomeController extends Notifier<HomeState> {
+  StreamSubscription<List<Note>>? _notesSubscription;
+
   @override
   HomeState build() {
-    // Charge les notes dès l'initialisation
-    Future.microtask(() => loadNotes());
+    // Abonnement temps reel a Firestore
+    final storage = ref.watch(storageServiceProvider);
+    _notesSubscription?.cancel();
+    _notesSubscription = storage.watchNotes().listen((notes) {
+      state = state.copyWith(allNotes: notes, isLoading: false);
+    });
+
+    ref.onDispose(() {
+      _notesSubscription?.cancel();
+    });
+
     return const HomeState(isLoading: true);
   }
 
   Future<void> loadNotes() async {
-    state = state.copyWith(isLoading: true);
     try {
       final notes = await ref.read(storageServiceProvider).getNotes();
       state = state.copyWith(allNotes: notes, isLoading: false);

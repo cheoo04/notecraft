@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_format_helper.dart';
+import '../../../core/widgets/audio_player_card.dart';
 import '../../../models/document.dart';
 import '../../../models/note.dart';
 import '../../../services/storage_service.dart';
@@ -166,6 +167,7 @@ class NoteDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
+
                       if (note.rawText != null &&
                           note.rawText!.trim().isNotEmpty) ...[
                         Container(
@@ -186,6 +188,7 @@ class NoteDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
+
                       if (note.rawSketchPaths.isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Row(
@@ -234,36 +237,13 @@ class NoteDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
+
+                      // Lecteur Audio interactif dans la note
                       if (note.audioPath != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.neutralFill,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.mic_none_rounded,
-                                size: 16,
-                                color: AppColors.accentTeal,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Audio capturé (${note.audioDuration?.inMinutes ?? 0} min)',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.inkDark,
-                                ),
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 16),
+                        AudioPlayerCard(
+                          audioPath: note.audioPath!,
+                          totalDuration: note.audioDuration,
                         ),
                       ],
                     ],
@@ -273,7 +253,7 @@ class NoteDetailScreen extends ConsumerWidget {
 
               const SizedBox(height: 24),
 
-              // 2. Section Documents generes avec Stream temps reel
+              // 2. Section Documents generes
               Text(
                 'Documents générés',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(

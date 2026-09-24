@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/audio_player_card.dart';
 import '../../../services/storage_service.dart';
 import '../controller/note_editor_controller.dart';
 
@@ -21,6 +23,7 @@ class NoteEditorScreen extends ConsumerStatefulWidget {
 class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
+  final ImagePicker _picker = ImagePicker();
   bool _saving = false;
 
   final List<String> _availableSubjects = [
@@ -28,8 +31,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     'Biologie',
     'Économie',
     'Droit',
+    'Informatique',
     'Maths',
     'Histoire',
+    'Général',
   ];
 
   @override
@@ -84,18 +89,77 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     }
   }
 
+  Future<void> _showPhotoSourceSheet() async {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Ajouter une photo de cours',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 14),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_outlined,
+                      color: AppColors.accentTeal),
+                  title: const Text('Prendre en photo le tableau / slide'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _pickImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_outlined,
+                      color: AppColors.accentTeal),
+                  title: const Text('Choisir depuis la galerie'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _pickImage(ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        ref.read(noteEditorControllerProvider.notifier).addImage(picked.path);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Impossible d\'accéder à l\'image : $e')),
+      );
+    }
+  }
+
   Future<void> _onNext() async {
     setState(() => _saving = true);
     final note = ref.read(noteEditorControllerProvider.notifier).buildNote();
     try {
       await ref.read(storageServiceProvider).saveNote(note);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Note sauvegardee localement : $e')),
-        );
-      }
-    }
+    } catch (_) {}
     if (!mounted) return;
     setState(() => _saving = false);
     context.push('/note/config', extra: note);
@@ -233,14 +297,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       ),
       body: Column(
         children: [
-          // Corps de prise de note
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Champ Titre
                   TextField(
                     controller: _titleController,
                     decoration: const InputDecoration(
@@ -261,7 +323,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   const Divider(color: AppColors.neutralBorder),
                   const SizedBox(height: 6),
 
-                  // Champ Contenu libre
                   TextField(
                     controller: _contentController,
                     decoration: const InputDecoration(
@@ -281,7 +342,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
 
-                  // Carrousel des schémas joints
+                  // Carrousel des schémas dessinés
                   if (editorState.sketchPaths.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Row(
@@ -352,18 +413,91 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ),
                   ],
 
-                  // Carte Enregistrement Audio (si actif ou présent)
-                  if (editorState.isRecording ||
-                      editorState.audioPath != null) ...[
+                  // Carrousel des photos de tableau
+                  if (editorState.imagePaths.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Icon(Icons.photo_camera_outlined,
+                            size: 16, color: AppColors.accentTeal),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Photos de tableau / slides (${editorState.imagePaths.length})',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.accentTeal,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 84,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: editorState.imagePaths.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (context, index) {
+                          final path = editorState.imagePaths[index];
+                          return Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 84,
+                                height: 84,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: AppColors.neutralBorder),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Image.file(
+                                  File(path),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: -6,
+                                right: -6,
+                                child: GestureDetector(
+                                  onTap: () => ref
+                                      .read(
+                                          noteEditorControllerProvider.notifier)
+                                      .removeImage(path),
+                                  child: const CircleAvatar(
+                                    radius: 11,
+                                    backgroundColor: AppColors.inkDark,
+                                    child: Icon(Icons.close,
+                                        size: 13, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+
+                  // Carte Enregistrement / Lecteur Audio
+                  if (editorState.isRecording) ...[
                     const SizedBox(height: 20),
                     _AudioRecordCard(
-                      isRecording: editorState.isRecording,
-                      timerText: editorState.isRecording
-                          ? editorState.formattedRecordingTime
-                          : 'Audio capturé (${editorState.audioDuration?.inMinutes ?? 0} min)',
+                      timerText: editorState.formattedRecordingTime,
                       onStop: () => ref
                           .read(noteEditorControllerProvider.notifier)
                           .stopRecording(),
+                      onDelete: () => ref
+                          .read(noteEditorControllerProvider.notifier)
+                          .deleteAudio(),
+                    ),
+                  ] else if (editorState.audioPath != null) ...[
+                    const SizedBox(height: 20),
+                    AudioPlayerCard(
+                      audioPath: editorState.audioPath!,
+                      totalDuration: editorState.audioDuration,
                       onDelete: () => ref
                           .read(noteEditorControllerProvider.notifier)
                           .deleteAudio(),
@@ -376,10 +510,11 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             ),
           ),
 
-          // Barre d'outils inférieure fidèle à la Diapositive 4
+          // Barre d'outils basse
           _BottomCaptureBar(
             isRecording: editorState.isRecording,
             onSketchTap: _onAddSketch,
+            onCameraTap: _showPhotoSourceSheet,
             onAudioTap: _onToggleAudio,
             onSubjectTap: _showSubjectPicker,
           ),
@@ -390,13 +525,11 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
 }
 
 class _AudioRecordCard extends StatelessWidget {
-  final bool isRecording;
   final String timerText;
   final VoidCallback onStop;
   final VoidCallback onDelete;
 
   const _AudioRecordCard({
-    required this.isRecording,
     required this.timerText,
     required this.onStop,
     required this.onDelete,
@@ -409,34 +542,28 @@ class _AudioRecordCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isRecording
-              ? Colors.redAccent.withValues(alpha: 0.4)
-              : AppColors.neutralBorder,
-        ),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
-          // Indicateur rouge pulsant
           Container(
             width: 10,
             height: 10,
-            decoration: BoxDecoration(
-              color: isRecording ? Colors.redAccent : AppColors.accentTeal,
+            decoration: const BoxDecoration(
+              color: Colors.redAccent,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 10),
-          // Fausses ondes audio
           Row(
             children: List.generate(
               5,
               (i) => Container(
                 margin: const EdgeInsets.symmetric(horizontal: 1.5),
                 width: 3,
-                height: (i % 2 == 0 ? 16 : 24) * (isRecording ? 1.0 : 0.6),
+                height: i % 2 == 0 ? 16 : 24,
                 decoration: BoxDecoration(
-                  color: isRecording ? Colors.redAccent : AppColors.accentTeal,
+                  color: Colors.redAccent,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -446,25 +573,24 @@ class _AudioRecordCard extends StatelessWidget {
           Expanded(
             child: Text(
               timerText,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isRecording ? Colors.redAccent : AppColors.inkDark,
+                color: Colors.redAccent,
               ),
             ),
           ),
-          if (isRecording)
-            IconButton(
-              icon: const Icon(Icons.stop_circle_outlined,
-                  color: Colors.redAccent),
-              onPressed: onStop,
-              tooltip: 'Arrêter l\'enregistrement',
-            ),
+          IconButton(
+            icon:
+                const Icon(Icons.stop_circle_outlined, color: Colors.redAccent),
+            onPressed: onStop,
+            tooltip: 'Arrêter l\'enregistrement',
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline,
                 color: AppColors.textMuted, size: 20),
             onPressed: onDelete,
-            tooltip: 'Supprimer l\'audio',
+            tooltip: 'Supprimer',
           ),
         ],
       ),
@@ -475,12 +601,14 @@ class _AudioRecordCard extends StatelessWidget {
 class _BottomCaptureBar extends StatelessWidget {
   final bool isRecording;
   final VoidCallback onSketchTap;
+  final VoidCallback onCameraTap;
   final VoidCallback onAudioTap;
   final VoidCallback onSubjectTap;
 
   const _BottomCaptureBar({
     required this.isRecording,
     required this.onSketchTap,
+    required this.onCameraTap,
     required this.onAudioTap,
     required this.onSubjectTap,
   });
@@ -505,26 +633,18 @@ class _BottomCaptureBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Outil Croquis / Dessin
           IconButton(
             icon: const Icon(Icons.draw_outlined),
             color: AppColors.inkDark,
             tooltip: 'Dessiner un schéma',
             onPressed: onSketchTap,
           ),
-          // Outil Photo / Tableau (préparé)
           IconButton(
             icon: const Icon(Icons.camera_alt_outlined),
-            color: AppColors.inkDark,
-            tooltip: 'Photo de tableau',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Module photo prêt pour le connecteur')),
-              );
-            },
+            color: AppColors.accentTeal,
+            tooltip: 'Photo de tableau / slide',
+            onPressed: onCameraTap,
           ),
-          // Dictaphone Audio (30 min)
           Container(
             decoration: BoxDecoration(
               color:
@@ -542,14 +662,12 @@ class _BottomCaptureBar extends StatelessWidget {
               onPressed: onAudioTap,
             ),
           ),
-          // Sélecteur de matière
           IconButton(
             icon: const Icon(Icons.label_outline),
             color: AppColors.inkDark,
             tooltip: 'Changer la matière',
             onPressed: onSubjectTap,
           ),
-          // Annuler / fermer
           IconButton(
             icon: const Icon(Icons.undo),
             color: AppColors.textMuted,

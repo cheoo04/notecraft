@@ -26,7 +26,21 @@ class ExportServiceImpl implements ExportService {
   @override
   Future<String> exportToPdf(GeneratedDocument document) async {
     final pdf = pw.Document();
-    final content = document.content ?? '';
+    var content = document.content ?? '';
+
+    // Normalisation typographique pour la police standard du PDF
+    content = content
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('‑', '-')
+        .replaceAll('–', '-')
+        .replaceAll('—', '-')
+        .replaceAll('•', '*')
+        .replaceAll('⁴', '^4')
+        .replaceAll('³', '^3')
+        .replaceAll('²', '^2');
 
     pdf.addPage(
       pw.MultiPage(

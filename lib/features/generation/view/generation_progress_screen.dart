@@ -8,8 +8,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/document.dart';
 import '../../../services/ai_service.dart';
+import '../../../services/ocr_service.dart';
 import '../../../services/sketch_service.dart';
 import '../../../services/storage_service.dart';
+import '../../../services/transcription_service.dart';
 import '../generation_request_args.dart';
 
 enum StepStatus { pending, inProgress, completed }
@@ -49,23 +51,55 @@ class _GenerationProgressScreenState
       final svgPaths = <String>[];
 
       // Etape 1 : Analyse du texte brut
-      await Future.delayed(const Duration(milliseconds: 600));
+      await Future.delayed(const Duration(milliseconds: 400));
       setState(() {
         _textStep = StepStatus.completed;
-        _percentage = 35;
+        _percentage = 25;
       });
 
-      // Etape 2 : Retranscription audio si present
+      // Etape 1b : Extraction Vision OCR sur photos de tableau si presentes
+      if (note.imagePaths.isNotEmpty) {
+        final ocrService = ref.read(ocrServiceProvider);
+        final ocrResults = <String>[];
+        for (final imgPath in note.imagePaths) {
+          try {
+            final extracted = await ocrService.extractTextFromImage(imgPath);
+            if (extracted.trim().isNotEmpty) {
+              ocrResults.add(extracted.trim());
+            }
+          } catch (_) {}
+        }
+        if (ocrResults.isNotEmpty) {
+          final ocrSection =
+              '--- Contenu extrait des photos de tableau et diapositives ---\n${ocrResults.join('\n\n')}';
+          note = note.copyWith(
+            rawText: '${note.rawText ?? ''}\n\n$ocrSection',
+          );
+        }
+      }
+
+      // Etape 2 : Retranscription audio Whisper si present
       if (note.audioPath != null) {
         setState(() => _audioStep = StepStatus.inProgress);
-        await Future.delayed(const Duration(milliseconds: 800));
+        try {
+          final transcriptionService = ref.read(transcriptionServiceProvider);
+          final audioText =
+              await transcriptionService.transcribe(note.audioPath!);
+          if (audioText.trim().isNotEmpty) {
+            final audioSection =
+                '--- Retranscription de l\'enregistrement audio oral du cours ---\n$audioText';
+            note = note.copyWith(
+              rawText: '${note.rawText ?? ''}\n\n$audioSection',
+            );
+          }
+        } catch (_) {}
         setState(() {
           _audioStep = StepStatus.completed;
           _percentage = 50;
         });
       }
 
-      // Etape 3 : Vectorisation des schemas
+      // Etape 3 : Vectorisation des schemas joints
       if (note.rawSketchPaths.isNotEmpty) {
         setState(() => _sketchStep = StepStatus.inProgress);
         final sketchService = ref.read(sketchServiceProvider);
@@ -89,11 +123,11 @@ class _GenerationProgressScreenState
 
         setState(() {
           _sketchStep = StepStatus.completed;
-          _percentage = 70;
+          _percentage = 75;
         });
       }
 
-      // Etape 4 : Redaction et mise en page IA
+      // Etape 4 : Redaction et mise en page finale
       setState(() => _layoutStep = StepStatus.inProgress);
       final aiService = ref.read(aiServiceProvider);
       var document = await aiService.generate(
@@ -121,7 +155,6 @@ class _GenerationProgressScreenState
     } catch (e) {
       if (!mounted) return;
       String message = e.toString();
-      // Extraction propre du message d'erreur du backend
       if (e is DioException && e.response?.data != null) {
         final data = e.response!.data;
         if (data is Map && data.containsKey('detail')) {
@@ -150,7 +183,6 @@ class _GenerationProgressScreenState
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_error == null) ...[
-                  // Jauge circulaire avec pourcentage
                   Stack(
                     alignment: Alignment.center,
                     children: [
@@ -175,7 +207,6 @@ class _GenerationProgressScreenState
                     ],
                   ),
                   const SizedBox(height: 24),
-
                   Text(
                     isAffine
                         ? 'Analyse Affinée en cours...'
@@ -188,7 +219,7 @@ class _GenerationProgressScreenState
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Nettoyage des schémas & structuration du document',
+                    'Nettoyage des schémas, analyse OCR & structuration',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
@@ -196,8 +227,6 @@ class _GenerationProgressScreenState
                     ),
                   ),
                   const SizedBox(height: 32),
-
-                  // Liste d'étapes validées pas à pas
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -208,7 +237,9 @@ class _GenerationProgressScreenState
                     child: Column(
                       children: [
                         _ProgressStepItem(
-                          label: 'Traitement du texte brut',
+                          label: widget.args!.note.imagePaths.isNotEmpty
+                              ? 'Texte brut & photos de tableau analysés'
+                              : 'Traitement du texte brut',
                           status: _textStep,
                         ),
                         const Divider(height: 18),
@@ -234,7 +265,6 @@ class _GenerationProgressScreenState
                     ),
                   ),
                   const SizedBox(height: 32),
-
                   TextButton(
                     onPressed: () => context.pop(),
                     child: const Text(
