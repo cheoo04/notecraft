@@ -25,7 +25,8 @@
         "path_provider",
         "pdf",
         "printing",
-        "record"
+        "record",
+        "universal_io"
       ],
       "devDependencies": [
         "build_runner",
@@ -110,6 +111,15 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "universal_io",
+      "version": "2.3.1",
+      "dependencies": [
+        "collection",
+        "meta",
+        "typed_data"
       ]
     },
     {
@@ -771,6 +781,13 @@
       ]
     },
     {
+      "name": "typed_data",
+      "version": "1.4.0",
+      "dependencies": [
+        "collection"
+      ]
+    },
+    {
       "name": "uuid",
       "version": "4.6.0",
       "dependencies": [
@@ -1349,13 +1366,6 @@
       "version": "1.0.1",
       "dependencies": [
         "web"
-      ]
-    },
-    {
-      "name": "typed_data",
-      "version": "1.4.0",
-      "dependencies": [
-        "collection"
       ]
     },
     {

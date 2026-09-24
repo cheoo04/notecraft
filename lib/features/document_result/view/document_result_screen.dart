@@ -1,16 +1,15 @@
 // lib/features/document_result/view/document_result_screen.dart
 
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:printing/printing.dart';
+import 'package:universal_io/io.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_svg_viewer.dart';
 import '../../../core/widgets/flashcard_deck_viewer.dart';
 import '../../../models/document.dart';
 import '../../../services/export_service.dart';
@@ -284,13 +283,11 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  // Mode Flashcards interactif
                                   if (isFlashcards) ...[
                                     FlashcardDeckViewer(
                                       rawJsonContent: document.content!,
                                     ),
                                   ] else ...[
-                                    // Mode Document standard
                                     Container(
                                       padding: const EdgeInsets.all(20),
                                       decoration: BoxDecoration(
@@ -356,10 +353,8 @@ class _DocumentResultScreenState extends ConsumerState<DocumentResultScreen> {
                                                   children: [
                                                     SizedBox(
                                                       height: 180,
-                                                      child: SvgPicture.file(
-                                                        File(path),
-                                                        fit: BoxFit.contain,
-                                                      ),
+                                                      child: AppSvgViewer(
+                                                          path: path),
                                                     ),
                                                     const SizedBox(height: 8),
                                                     const Text(

@@ -1,7 +1,7 @@
 // lib/features/note_editor/controller/note_editor_controller.dart
 
 import 'dart:async';
-import 'dart:io';
+import 'package:universal_io/io.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
