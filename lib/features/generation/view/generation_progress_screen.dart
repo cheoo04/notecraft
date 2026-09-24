@@ -78,24 +78,33 @@ class _GenerationProgressScreenState
         }
       }
 
-      // Etape 2 : Retranscription audio Whisper si present
-      if (note.audioPath != null) {
+      // Etape 2 : Retranscription de tous les extraits audio Whisper dans l'ordre
+      if (note.audioPaths.isNotEmpty) {
         setState(() => _audioStep = StepStatus.inProgress);
-        try {
-          final transcriptionService = ref.read(transcriptionServiceProvider);
-          final audioText =
-              await transcriptionService.transcribe(note.audioPath!);
-          if (audioText.trim().isNotEmpty) {
-            final audioSection =
-                '--- Retranscription de l\'enregistrement audio oral du cours ---\n$audioText';
-            note = note.copyWith(
-              rawText: '${note.rawText ?? ''}\n\n$audioSection',
-            );
-          }
-        } catch (_) {}
+        final transcriptionService = ref.read(transcriptionServiceProvider);
+        final audioTexts = <String>[];
+
+        for (int i = 0; i < note.audioPaths.length; i++) {
+          try {
+            final text =
+                await transcriptionService.transcribe(note.audioPaths[i]);
+            if (text.trim().isNotEmpty) {
+              audioTexts.add('Extrait ${i + 1} :\n$text');
+            }
+          } catch (_) {}
+        }
+
+        if (audioTexts.isNotEmpty) {
+          final audioSection =
+              '--- Retranscription des enregistrements oraux du cours ---\n${audioTexts.join('\n\n')}';
+          note = note.copyWith(
+            rawText: '${note.rawText ?? ''}\n\n$audioSection',
+          );
+        }
+
         setState(() {
           _audioStep = StepStatus.completed;
-          _percentage = 50;
+          _percentage = 55;
         });
       }
 
@@ -244,8 +253,8 @@ class _GenerationProgressScreenState
                         ),
                         const Divider(height: 18),
                         _ProgressStepItem(
-                          label: widget.args!.note.audioPath != null
-                              ? 'Enregistrement vocal analysé'
+                          label: widget.args!.note.audioPaths.isNotEmpty
+                              ? 'Enregistrements vocaux analysés (${widget.args!.note.audioPaths.length})'
                               : 'Contenu audio vérifié',
                           status: _audioStep,
                         ),

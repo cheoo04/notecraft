@@ -1,16 +1,16 @@
 // lib/models/note.dart
 
-/// Une note saisie par l'utilisateur : texte, esquisses, photos, audio (≤ 30 min)
+/// Une note saisie par l'utilisateur : texte, esquisses, photos, audios multiples
 /// et métadonnées de cours (matière, tags).
 class Note {
   final String id;
   final String title;
-  final String subject; // Ex: Physique, Biologie, Économie, Droit
+  final String subject;
   final String? rawText;
   final List<String> rawSketchPaths;
   final String? sketchSvgPath;
   final List<String> imagePaths;
-  final String? audioPath;
+  final List<String> audioPaths;
   final Duration? audioDuration;
   final DateTime createdAt;
 
@@ -22,7 +22,7 @@ class Note {
     this.rawSketchPaths = const [],
     this.sketchSvgPath,
     this.imagePaths = const [],
-    this.audioPath,
+    this.audioPaths = const [],
     this.audioDuration,
     required this.createdAt,
   });
@@ -34,7 +34,7 @@ class Note {
     List<String>? rawSketchPaths,
     String? sketchSvgPath,
     List<String>? imagePaths,
-    String? audioPath,
+    List<String>? audioPaths,
     Duration? audioDuration,
   }) {
     return Note(
@@ -45,7 +45,7 @@ class Note {
       rawSketchPaths: rawSketchPaths ?? this.rawSketchPaths,
       sketchSvgPath: sketchSvgPath ?? this.sketchSvgPath,
       imagePaths: imagePaths ?? this.imagePaths,
-      audioPath: audioPath ?? this.audioPath,
+      audioPaths: audioPaths ?? this.audioPaths,
       audioDuration: audioDuration ?? this.audioDuration,
       createdAt: createdAt,
     );
@@ -58,24 +58,35 @@ class Note {
         'rawSketchPaths': rawSketchPaths,
         'sketchSvgPath': sketchSvgPath,
         'imagePaths': imagePaths,
-        'audioPath': audioPath,
+        'audioPaths': audioPaths,
         'audioDurationMs': audioDuration?.inMilliseconds,
         'createdAt': createdAt.toIso8601String(),
       };
 
-  factory Note.fromMap(String id, Map<String, dynamic> map) => Note(
-        id: id,
-        title: map['title'] as String? ?? 'Note sans titre',
-        subject: map['subject'] as String? ?? 'Général',
-        rawText: map['rawText'] as String?,
-        rawSketchPaths:
-            (map['rawSketchPaths'] as List?)?.cast<String>() ?? const [],
-        sketchSvgPath: map['sketchSvgPath'] as String?,
-        imagePaths: (map['imagePaths'] as List?)?.cast<String>() ?? const [],
-        audioPath: map['audioPath'] as String?,
-        audioDuration: map['audioDurationMs'] != null
-            ? Duration(milliseconds: map['audioDurationMs'] as int)
-            : null,
-        createdAt: DateTime.parse(map['createdAt'] as String),
-      );
+  factory Note.fromMap(String id, Map<String, dynamic> map) {
+    // Retrocompatibilite : si audioPaths n'existe pas, on recupere l'ancien audioPath unique
+    List<String> loadedAudioPaths = [];
+    if (map['audioPaths'] != null) {
+      loadedAudioPaths = (map['audioPaths'] as List).cast<String>();
+    } else if (map['audioPath'] != null &&
+        (map['audioPath'] as String).isNotEmpty) {
+      loadedAudioPaths = [map['audioPath'] as String];
+    }
+
+    return Note(
+      id: id,
+      title: map['title'] as String? ?? 'Note sans titre',
+      subject: map['subject'] as String? ?? 'Général',
+      rawText: map['rawText'] as String?,
+      rawSketchPaths:
+          (map['rawSketchPaths'] as List?)?.cast<String>() ?? const [],
+      sketchSvgPath: map['sketchSvgPath'] as String?,
+      imagePaths: (map['imagePaths'] as List?)?.cast<String>() ?? const [],
+      audioPaths: loadedAudioPaths,
+      audioDuration: map['audioDurationMs'] != null
+          ? Duration(milliseconds: map['audioDurationMs'] as int)
+          : null,
+      createdAt: DateTime.parse(map['createdAt'] as String),
+    );
+  }
 }

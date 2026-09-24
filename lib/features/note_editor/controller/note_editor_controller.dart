@@ -16,7 +16,7 @@ class NoteEditorState {
   final String content;
   final List<String> sketchPaths;
   final List<String> imagePaths;
-  final String? audioPath;
+  final List<String> audioPaths;
   final Duration? audioDuration;
   final bool isRecording;
   final int recordingSeconds;
@@ -27,7 +27,7 @@ class NoteEditorState {
     this.content = '',
     this.sketchPaths = const [],
     this.imagePaths = const [],
-    this.audioPath,
+    this.audioPaths = const [],
     this.audioDuration,
     this.isRecording = false,
     this.recordingSeconds = 0,
@@ -37,7 +37,7 @@ class NoteEditorState {
       content.trim().isNotEmpty ||
       sketchPaths.isNotEmpty ||
       imagePaths.isNotEmpty ||
-      audioPath != null;
+      audioPaths.isNotEmpty;
 
   String get formattedRecordingTime {
     final minutes = (recordingSeconds ~/ 60).toString().padLeft(2, '0');
@@ -51,11 +51,10 @@ class NoteEditorState {
     String? content,
     List<String>? sketchPaths,
     List<String>? imagePaths,
-    String? audioPath,
+    List<String>? audioPaths,
     Duration? audioDuration,
     bool? isRecording,
     int? recordingSeconds,
-    bool clearAudio = false,
   }) {
     return NoteEditorState(
       title: title ?? this.title,
@@ -63,8 +62,8 @@ class NoteEditorState {
       content: content ?? this.content,
       sketchPaths: sketchPaths ?? this.sketchPaths,
       imagePaths: imagePaths ?? this.imagePaths,
-      audioPath: clearAudio ? null : (audioPath ?? this.audioPath),
-      audioDuration: clearAudio ? null : (audioDuration ?? this.audioDuration),
+      audioPaths: audioPaths ?? this.audioPaths,
+      audioDuration: audioDuration ?? this.audioDuration,
       isRecording: isRecording ?? this.isRecording,
       recordingSeconds: recordingSeconds ?? this.recordingSeconds,
     );
@@ -123,23 +122,19 @@ class NoteEditorController extends Notifier<NoteEditorState> {
     );
   }
 
-  // Enregistrement reel avec le micro du telephone
   Future<bool> startRecording() async {
     if (state.isRecording) return false;
 
-    // 1. Demande de permission micro
     final hasPermission = await _audioRecorder.hasPermission();
     if (!hasPermission) return false;
 
     _recordingTimer?.cancel();
 
     try {
-      // 2. Creation d'un vrai fichier dans le dossier documents de l'application
       final dir = await getApplicationDocumentsDirectory();
       final filePath =
           '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-      // 3. Demarrage de l'enregistrement en AAC (.m4a)
       await _audioRecorder.start(
         const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000),
         path: filePath,
@@ -168,15 +163,11 @@ class NoteEditorController extends Notifier<NoteEditorState> {
     _recordingTimer?.cancel();
 
     try {
-      // Arrete l'enregistreur et recupere le chemin reel du fichier audio
       final realPath = await _audioRecorder.stop();
-      final duration = Duration(seconds: state.recordingSeconds);
-
       if (realPath != null && await File(realPath).exists()) {
         state = state.copyWith(
           isRecording: false,
-          audioPath: realPath,
-          audioDuration: duration,
+          audioPaths: [...state.audioPaths, realPath],
         );
       } else {
         state = state.copyWith(isRecording: false);
@@ -186,26 +177,16 @@ class NoteEditorController extends Notifier<NoteEditorState> {
     }
   }
 
-  Future<void> deleteAudio() async {
-    _recordingTimer?.cancel();
-
-    if (state.isRecording) {
-      await _audioRecorder.stop();
-    }
-
-    if (state.audioPath != null) {
-      try {
-        final file = File(state.audioPath!);
-        if (await file.exists()) {
-          await file.delete();
-        }
-      } catch (_) {}
-    }
+  Future<void> removeAudio(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
 
     state = state.copyWith(
-      isRecording: false,
-      recordingSeconds: 0,
-      clearAudio: true,
+      audioPaths: state.audioPaths.where((p) => p != path).toList(),
     );
   }
 
@@ -219,8 +200,7 @@ class NoteEditorController extends Notifier<NoteEditorState> {
       rawText: state.content.trim(),
       rawSketchPaths: state.sketchPaths,
       imagePaths: state.imagePaths,
-      audioPath: state.audioPath,
-      audioDuration: state.audioDuration,
+      audioPaths: state.audioPaths,
       createdAt: now,
     );
   }

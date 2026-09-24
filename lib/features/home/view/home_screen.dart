@@ -33,7 +33,6 @@ class HomeScreen extends ConsumerWidget {
           },
           child: CustomScrollView(
             slivers: [
-              // En-tete dynamique : Vrai Prenom + Vraies Initiales
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -95,8 +94,6 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-
-              // Barre de recherche universelle
               SliverToBoxAdapter(
                 child: Padding(
                   padding:
@@ -124,8 +121,6 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-
-              // Filtres rapides horizontaux
               SliverToBoxAdapter(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -168,8 +163,6 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-
-              // Banniere Capture Rapide
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -221,7 +214,7 @@ class HomeScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Texte, schémas ou enregistrement audio',
+                          'Texte, schémas ou enregistrements audio',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.8),
                             fontSize: 12,
@@ -253,8 +246,6 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-
-              // Titre section "Dernieres captures"
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
@@ -266,8 +257,6 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-
-              // Liste des notes récentes
               if (homeState.isLoading)
                 const SliverToBoxAdapter(
                   child: Center(
@@ -317,7 +306,6 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 30)),
             ],
           ),
@@ -376,9 +364,9 @@ class _NoteCard extends StatelessWidget {
     if (note.subject.isNotEmpty && note.subject != 'Général') {
       details.add(note.subject);
     }
-    if (note.audioPath != null) {
-      final min = note.audioDuration?.inMinutes ?? 0;
-      details.add('Audio ${min > 0 ? "$min min" : ""}');
+    if (note.audioPaths.isNotEmpty) {
+      final count = note.audioPaths.length;
+      details.add('Audio ($count extrait${count > 1 ? "s" : ""})');
     }
     if (note.rawSketchPaths.isNotEmpty) {
       details.add('${note.rawSketchPaths.length} schéma(s)');
@@ -407,7 +395,7 @@ class _NoteCard extends StatelessWidget {
             child: Icon(
               note.rawSketchPaths.isNotEmpty
                   ? Icons.draw_outlined
-                  : (note.audioPath != null
+                  : (note.audioPaths.isNotEmpty
                       ? Icons.mic_none_rounded
                       : Icons.description_outlined),
               color: AppColors.accentTeal,

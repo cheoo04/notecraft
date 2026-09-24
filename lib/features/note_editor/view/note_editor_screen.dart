@@ -489,7 +489,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ),
                   ],
 
-                  // Carte Enregistrement / Lecteur Audio
+                  // Enregistrement en cours
                   if (editorState.isRecording) ...[
                     const SizedBox(height: 20),
                     _AudioRecordCard(
@@ -497,19 +497,39 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                       onStop: () => ref
                           .read(noteEditorControllerProvider.notifier)
                           .stopRecording(),
-                      onDelete: () => ref
-                          .read(noteEditorControllerProvider.notifier)
-                          .deleteAudio(),
                     ),
-                  ] else if (editorState.audioPath != null) ...[
+                  ],
+
+                  // Liste de tous les extraits audio enregistrés
+                  if (editorState.audioPaths.isNotEmpty) ...[
                     const SizedBox(height: 20),
-                    AudioPlayerCard(
-                      audioPath: editorState.audioPath!,
-                      totalDuration: editorState.audioDuration,
-                      onDelete: () => ref
-                          .read(noteEditorControllerProvider.notifier)
-                          .deleteAudio(),
+                    Row(
+                      children: [
+                        const Icon(Icons.mic_none_rounded,
+                            size: 16, color: AppColors.accentTeal),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Enregistrements vocaux (${editorState.audioPaths.length})',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.accentTeal,
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 8),
+                    for (int i = 0; i < editorState.audioPaths.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: AudioPlayerCard(
+                          key: ValueKey(editorState.audioPaths[i]),
+                          audioPath: editorState.audioPaths[i],
+                          onDelete: () => ref
+                              .read(noteEditorControllerProvider.notifier)
+                              .removeAudio(editorState.audioPaths[i]),
+                        ),
+                      ),
                   ],
 
                   const SizedBox(height: 40),
@@ -517,8 +537,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               ),
             ),
           ),
-
-          // Barre d'outils basse
           _BottomCaptureBar(
             isRecording: editorState.isRecording,
             onSketchTap: _onAddSketch,
@@ -535,12 +553,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
 class _AudioRecordCard extends StatelessWidget {
   final String timerText;
   final VoidCallback onStop;
-  final VoidCallback onDelete;
 
   const _AudioRecordCard({
     required this.timerText,
     required this.onStop,
-    required this.onDelete,
   });
 
   @override
@@ -593,12 +609,6 @@ class _AudioRecordCard extends StatelessWidget {
                 const Icon(Icons.stop_circle_outlined, color: Colors.redAccent),
             onPressed: onStop,
             tooltip: 'Arrêter l\'enregistrement',
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: AppColors.textMuted, size: 20),
-            onPressed: onDelete,
-            tooltip: 'Supprimer',
           ),
         ],
       ),

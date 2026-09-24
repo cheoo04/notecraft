@@ -49,7 +49,7 @@ class HomeState {
 
     switch (selectedFilter) {
       case NoteFilterType.audio:
-        notes = notes.where((n) => n.audioPath != null).toList();
+        notes = notes.where((n) => n.audioPaths.isNotEmpty).toList();
         break;
       case NoteFilterType.cornell:
         notes = notes
@@ -74,7 +74,6 @@ class HomeController extends Notifier<HomeState> {
 
   @override
   HomeState build() {
-    // Abonnement temps reel a Firestore
     final storage = ref.watch(storageServiceProvider);
     _notesSubscription?.cancel();
     _notesSubscription = storage.watchNotes().listen((notes) {

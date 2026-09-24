@@ -189,6 +189,7 @@ class NoteDetailScreen extends ConsumerWidget {
                         ),
                       ],
 
+                      // Schémas
                       if (note.rawSketchPaths.isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Row(
@@ -238,13 +239,86 @@ class NoteDetailScreen extends ConsumerWidget {
                         ),
                       ],
 
-                      // Lecteur Audio interactif dans la note
-                      if (note.audioPath != null) ...[
-                        const SizedBox(height: 16),
-                        AudioPlayerCard(
-                          audioPath: note.audioPath!,
-                          totalDuration: note.audioDuration,
+                      // Photos
+                      if (note.imagePaths.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.photo_camera_outlined,
+                              size: 16,
+                              color: AppColors.accentTeal,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${note.imagePaths.length} photo(s) de cours',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.accentTeal,
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 70,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: note.imagePaths.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              final path = note.imagePaths[index];
+                              return Container(
+                                width: 70,
+                                height: 70,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                      color: AppColors.neutralBorder),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Image.file(
+                                  File(path),
+                                  fit: BoxFit.cover,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+
+                      // Lecteurs pour tous les extraits audio enregistrés
+                      if (note.audioPaths.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.mic_none_rounded,
+                              size: 16,
+                              color: AppColors.accentTeal,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Enregistrements vocaux (${note.audioPaths.length})',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.accentTeal,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        for (int i = 0; i < note.audioPaths.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: AudioPlayerCard(
+                              key: ValueKey(note.audioPaths[i]),
+                              audioPath: note.audioPaths[i],
+                            ),
+                          ),
                       ],
                     ],
                   ),
@@ -253,7 +327,7 @@ class NoteDetailScreen extends ConsumerWidget {
 
               const SizedBox(height: 24),
 
-              // 2. Section Documents generes
+              // 2. Section Documents générés
               Text(
                 'Documents générés',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
