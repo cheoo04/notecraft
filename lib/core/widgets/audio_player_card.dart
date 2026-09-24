@@ -1,11 +1,11 @@
 // lib/core/widgets/audio_player_card.dart
 
 import 'dart:async';
-import 'dart:io';
-
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:universal_io/io.dart';
 
 import '../theme/app_theme.dart';
 
@@ -87,24 +87,32 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
 
   Future<void> _togglePlay() async {
     HapticFeedback.selectionClick();
-    final file = File(widget.audioPath);
-
-    if (!await file.exists()) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Fichier audio introuvable sur le stockage local.'),
-        ),
-      );
-      return;
-    }
 
     try {
       if (_isPlaying) {
         await _player.pause();
-      } else {
-        await _player.play(DeviceFileSource(widget.audioPath));
+        return;
       }
+
+      // 1. Cas Web : lecture directe de l'URL blob
+      if (kIsWeb) {
+        await _player.play(UrlSource(widget.audioPath));
+        return;
+      }
+
+      // 2. Cas Mobile : verification du fichier local
+      final file = File(widget.audioPath);
+      if (!await file.exists()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fichier audio introuvable sur le stockage local.'),
+          ),
+        );
+        return;
+      }
+
+      await _player.play(DeviceFileSource(widget.audioPath));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -138,7 +146,6 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
         children: [
           Row(
             children: [
-              // Bouton Play / Pause
               GestureDetector(
                 onTap: _togglePlay,
                 child: Container(
@@ -156,8 +163,6 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
                 ),
               ),
               const SizedBox(width: 8),
-
-              // Curseur de progression
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,14 +213,12 @@ class _AudioPlayerCardState extends State<AudioPlayerCard> {
                   ],
                 ),
               ),
-
-              // Bouton de suppression facultatif
               if (widget.onDelete != null)
                 IconButton(
                   icon: const Icon(Icons.delete_outline,
                       color: AppColors.textMuted, size: 20),
                   onPressed: widget.onDelete,
-                  tooltip: 'Supprimer l\'enregistrement',
+                  tooltip: 'Supprimer',
                 ),
             ],
           ),

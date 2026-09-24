@@ -1,11 +1,11 @@
 // lib/features/note_editor/controller/note_editor_controller.dart
 
 import 'dart:async';
-import 'package:universal_io/io.dart';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:universal_io/io.dart';
 
 import '../../../models/note.dart';
 import '../../settings/controller/settings_controller.dart';
@@ -131,14 +131,23 @@ class NoteEditorController extends Notifier<NoteEditorState> {
     _recordingTimer?.cancel();
 
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final filePath =
-          '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      String filePath = '';
+      RecordConfig config;
 
-      await _audioRecorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000),
-        path: filePath,
-      );
+      if (kIsWeb) {
+        // Sur le Web : codec Opus/WebM sans chemin physique
+        config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000);
+        filePath = '';
+      } else {
+        // Sur Android/iOS : fichier m4a dans le stockage documents
+        final dir = await getApplicationDocumentsDirectory();
+        filePath =
+            '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        config =
+            const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000);
+      }
+
+      await _audioRecorder.start(config, path: filePath);
 
       state = state.copyWith(
         isRecording: true,
@@ -164,7 +173,9 @@ class NoteEditorController extends Notifier<NoteEditorState> {
 
     try {
       final realPath = await _audioRecorder.stop();
-      if (realPath != null && await File(realPath).exists()) {
+      // Sur le Web, realPath est une URL de type blob:http...
+      // Sur mobile, c'est le chemin du fichier local
+      if (realPath != null && realPath.isNotEmpty) {
         state = state.copyWith(
           isRecording: false,
           audioPaths: [...state.audioPaths, realPath],
@@ -178,12 +189,14 @@ class NoteEditorController extends Notifier<NoteEditorState> {
   }
 
   Future<void> removeAudio(String path) async {
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
 
     state = state.copyWith(
       audioPaths: state.audioPaths.where((p) => p != path).toList(),

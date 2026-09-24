@@ -1,26 +1,10 @@
+# backend/services/sketch_interpreter.py
+
 """
 Interprète une esquisse à main levée (image PNG envoyée depuis Flutter)
 et la reconstruit en SVG propre, via un modèle multimodal.
-
-Approche V1 (réaliste, cf. étude de faisabilité) : pas de vectorisation
-pixel par pixel comme Nebo/MyScript (des décennies de R&D dédiée), mais
-un seul appel à un modèle multimodal existant qui renvoie à la fois le
-SVG reconstruit ET une courte description structurée des relations du
-schéma (ex. "A -> B, B -> C") — cette description est destinée à être
-réinjectée dans le prompt de génération du document (étape 3), pour
-éviter un second appel IA dédié uniquement à la description.
-
-Suit le même choix de fournisseur que ai_client.py (variable
-AI_PROVIDER), avec des modèles vision spécifiques :
-- "groq"      : qwen/qwen3.6-27b (vision-capable, gratuit/développeur —
-                voir console.groq.com/docs/vision)
-- "anthropic" : claude-sonnet-5 (déjà utilisé en mode affiné, vision
-                native)
-
-Les identifiants de modèle vision Groq changent régulièrement, comme les
-modèles texte (voir ai_client.py) : vérifier console.groq.com/docs/vision
-si le modèle par défaut ci-dessous ne répond plus, et l'ajuster via
-GROQ_MODEL_VISION sans changer ce fichier.
+Gère les schémas relationnels, les flux, et les tableaux / grilles tracés à main levée.
+Tolérant à l'écriture au doigt sur smartphone tout en reconnaissant les étiquettes tapées au clavier.
 """
 
 import base64
@@ -45,33 +29,33 @@ else:
     VISION_MODEL = os.environ.get("GROQ_MODEL_VISION", "qwen/qwen3.6-27b")
 
 
-_PROMPT = """Tu vois un schéma dessiné à main levée par un·e étudiant·e (trait noir sur fond blanc).
+_PROMPT = """Tu analyses un schéma ou croquis d'étude réalisé par un étudiant (tracé noir et texte sur fond blanc).
+
+L'image peut combiner des tracés à main levée au doigt, des étiquettes de texte dactylographiées ou des annotations manuscrites : interprète l'intention globale de l'étudiant avec précision et bienveillance.
 
 Fais deux choses, et réponds UNIQUEMENT avec un objet JSON valide au format exact suivant, sans aucun texte avant ou après :
 
 {
   "svg": "<code SVG complet et valide ici>",
-  "description": "<description courte et structurée des relations, une ligne par relation, ex. 'A -> B', 'B contient C'>"
+  "description": "<description courte et structurée des relations ou du tableau, une ligne par élément, ex. 'A -> B', 'Tableau: Colonne 1 = ..., Colonne 2 = ...'>"
 }
 
-Pour le SVG :
-- Reconstruit proprement les formes (rectangles, cercles, flèches, texte) que tu identifies dans le croquis, sans copier le tracé brut
-- Utilise un viewBox de "0 0 400 300"
-- Formes en noir (#000000) sur fond transparent, traits fins (stroke-width 1.5 à 2)
-- N'invente pas d'éléments qui ne sont pas dans le croquis
+Consignes strictes pour le SVG :
+1. Formes géométriques : Reconstruis proprement les formes (cercles réguliers, rectangles droits, flèches de connexion vectorielles nettes). Supprime les tremblements du doigt.
+2. Tableaux et Grilles : Si le croquis esquisse un tableau ou une matrice, redessine une structure de tableau nette, avec des séparateurs alignés et des bordures soignées.
+3. Typographie : Transcris tout mot ou symbole (qu'il soit tapé au clavier ou gribouillé au doigt) sous forme de texte vectoriel propre (<text>), parfaitement lisible et centré à l'intérieur de la forme ou de la cellule correspondante.
+4. Style visuel :
+   - viewBox de "0 0 400 300" (ou adapté si format panoramique).
+   - Traits fins et nets (#0F766E ou #111827), fond transparent.
+   - N'invente pas d'éléments majeurs qui ne figurent pas dans l'esquisse.
 
-Pour la description :
-- Une ligne par relation ou élément clé identifié
-- Reste factuel, pas d'interprétation au-delà de ce qui est visible
+Consignes pour la description :
+- Reste factuel, une ligne par relation (A -> B) ou par ligne de tableau.
+- Cette description sera injectée dans le prompt pour que le modèle texte comprenne la structure.
 """
 
 
 def interpret_sketch(image_bytes: bytes) -> dict:
-    """
-    Envoie l'image du croquis au modèle vision et renvoie
-    {"svg": str, "description": str}.
-    Lève ValueError si la réponse n'est pas exploitable.
-    """
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
     if PROVIDER == "anthropic":
@@ -97,11 +81,7 @@ def interpret_sketch(image_bytes: bytes) -> dict:
                 ],
             )
         except Exception as e:
-            # Toute erreur SDK (modèle inconnu/indisponible, clé invalide,
-            # quota, etc.) devient une ValueError propre plutôt qu'un
-            # crash brut de l'app — voir routes/sketch.py qui la convertit
-            # en réponse HTTP 502 lisible.
-            raise ValueError(f"Appel au modèle vision ({VISION_MODEL}) échoué : {e}") from e
+            raise ValueError(f"Appel vision Anthropic ({VISION_MODEL}) échoué : {e}") from e
         raw = "".join(
             block.text for block in response.content if block.type == "text"
         )
@@ -124,19 +104,17 @@ def interpret_sketch(image_bytes: bytes) -> dict:
                 ],
             )
         except Exception as e:
-            raise ValueError(f"Appel au modèle vision ({VISION_MODEL}) échoué : {e}") from e
+            raise ValueError(f"Appel vision Groq ({VISION_MODEL}) échoué : {e}") from e
         raw = response.choices[0].message.content
 
     return _parse_response(raw)
 
 
 def _parse_response(raw: str) -> dict:
-    # Certains modèles enveloppent le JSON dans un bloc ```json malgré la
-    # consigne — on l'extrait au besoin plutôt que d'échouer bêtement.
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
-        raise ValueError(f"Réponse du modèle non exploitable (pas de JSON) : {raw[:200]}")
+        raise ValueError(f"Réponse vision non exploitable (pas de JSON) : {raw[:200]}")
     data = json.loads(match.group(0))
     if "svg" not in data or "description" not in data:
-        raise ValueError(f"JSON incomplet renvoyé par le modèle : {data}")
+        raise ValueError(f"JSON incomplet renvoyé par le modèle vision : {data}")
     return data

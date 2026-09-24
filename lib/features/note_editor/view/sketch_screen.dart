@@ -1,23 +1,17 @@
+// lib/features/note_editor/view/sketch_screen.dart
+
 import 'dart:convert';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:universal_io/io.dart';
 
-/// Écran de dessin à main levée pour un schéma/croquis.
-/// Si [existingPngPath] est fourni, recharge les traits sauvegardés
-/// (fichier .json à côté du .png) pour permettre de compléter/gommer un
-/// schéma déjà commencé, plutôt que de repartir de zéro.
-class SketchScreen extends StatefulWidget {
-  final String? existingPngPath;
+import '../../../core/theme/app_theme.dart';
 
-  const SketchScreen({super.key, this.existingPngPath});
-
-  @override
-  State<SketchScreen> createState() => _SketchScreenState();
-}
+enum SketchTool { pen, text, eraser }
 
 class _SketchStroke {
   final List<Offset> points;
@@ -40,10 +34,41 @@ class _SketchStroke {
       );
 }
 
+class _SketchLabel {
+  final String text;
+  final Offset position;
+  _SketchLabel(this.text, this.position);
+
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'x': position.dx,
+        'y': position.dy,
+      };
+
+  factory _SketchLabel.fromJson(Map<String, dynamic> json) => _SketchLabel(
+        json['text'] as String,
+        Offset(
+          (json['x'] as num).toDouble(),
+          (json['y'] as num).toDouble(),
+        ),
+      );
+}
+
+class SketchScreen extends StatefulWidget {
+  final String? existingPngPath;
+
+  const SketchScreen({super.key, this.existingPngPath});
+
+  @override
+  State<SketchScreen> createState() => _SketchScreenState();
+}
+
 class _SketchScreenState extends State<SketchScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   final List<_SketchStroke> _strokes = [];
-  bool _erasing = false;
+  final List<_SketchLabel> _labels = [];
+
+  SketchTool _currentTool = SketchTool.pen;
   bool _saving = false;
   bool _loading = true;
   late final String _id;
@@ -54,7 +79,11 @@ class _SketchScreenState extends State<SketchScreen> {
     final existing = widget.existingPngPath;
     _id = existing == null
         ? DateTime.now().microsecondsSinceEpoch.toString()
-        : existing.split('/').last.replaceFirst('sketch_', '').replaceFirst('.png', '');
+        : existing
+            .split('/')
+            .last
+            .replaceFirst('sketch_', '')
+            .replaceFirst('.png', '');
     _loadExisting();
   }
 
@@ -65,53 +94,130 @@ class _SketchScreenState extends State<SketchScreen> {
         final jsonPath = existing.replaceFirst('.png', '.json');
         final file = File(jsonPath);
         if (await file.exists()) {
-          final raw = jsonDecode(await file.readAsString()) as List;
-          _strokes.addAll(
-            raw.map((s) => _SketchStroke.fromJson(s as Map<String, dynamic>)),
-          );
+          final decoded = jsonDecode(await file.readAsString());
+          if (decoded is List) {
+            _strokes.addAll(
+              decoded.map(
+                  (s) => _SketchStroke.fromJson(s as Map<String, dynamic>)),
+            );
+          } else if (decoded is Map<String, dynamic>) {
+            final strokeList = decoded['strokes'] as List? ?? [];
+            _strokes.addAll(
+              strokeList.map(
+                  (s) => _SketchStroke.fromJson(s as Map<String, dynamic>)),
+            );
+            final labelList = decoded['labels'] as List? ?? [];
+            _labels.addAll(
+              labelList
+                  .map((l) => _SketchLabel.fromJson(l as Map<String, dynamic>)),
+            );
+          }
         }
-      } catch (_) {
-        // Traits perdus (fichier manquant/corrompu) : on repart d'un
-        // canvas vide plutôt que de planter l'écran.
-      }
+      } catch (_) {}
     }
     if (mounted) setState(() => _loading = false);
   }
 
   void _onPanStart(DragStartDetails details) {
+    if (_currentTool == SketchTool.text) {
+      _promptAddText(details.localPosition);
+      return;
+    }
+
     setState(() {
-      _strokes.add(_SketchStroke([details.localPosition], erase: _erasing));
+      _strokes.add(
+        _SketchStroke(
+          [details.localPosition],
+          erase: _currentTool == SketchTool.eraser,
+        ),
+      );
     });
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
+    if (_currentTool == SketchTool.text) return;
     setState(() {
       _strokes.last.points.add(details.localPosition);
     });
   }
 
+  void _promptAddText(Offset position) {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Ajouter une étiquette / texte',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Ex: Capteur IoT, Tri rapide, Nœud A...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = textController.text.trim();
+              if (text.isNotEmpty) {
+                setState(() {
+                  _labels.add(_SketchLabel(text, position));
+                });
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Placer le texte'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _undo() {
-    if (_strokes.isNotEmpty) setState(() => _strokes.removeLast());
+    HapticFeedback.lightImpact();
+    setState(() {
+      if (_strokes.isNotEmpty) {
+        _strokes.removeLast();
+      } else if (_labels.isNotEmpty) {
+        _labels.removeLast();
+      }
+    });
   }
 
   void _clear() {
-    setState(() => _strokes.clear());
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _strokes.clear();
+      _labels.clear();
+    });
   }
 
   Future<void> _finish() async {
-    if (_strokes.isEmpty) {
+    if (_strokes.isEmpty && _labels.isEmpty) {
       Navigator.of(context).pop();
       return;
     }
+
     setState(() => _saving = true);
     try {
       final dir = await getApplicationDocumentsDirectory();
       final jsonPath = '${dir.path}/sketch_$_id.json';
       final pngPath = '${dir.path}/sketch_$_id.png';
 
-      await File(jsonPath).writeAsString(
-        jsonEncode(_strokes.map((s) => s.toJson()).toList()),
-      );
+      final data = {
+        'strokes': _strokes.map((s) => s.toJson()).toList(),
+        'labels': _labels.map((l) => l.toJson()).toList(),
+      };
+      await File(jsonPath).writeAsString(jsonEncode(data));
 
       final boundary = _boundaryKey.currentContext!.findRenderObject()
           as RenderRepaintBoundary;
@@ -129,27 +235,68 @@ class _SketchScreenState extends State<SketchScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.accentTeal),
+        ),
+      );
     }
+
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.existingPngPath == null ? 'Nouveau schéma' : 'Modifier le schéma'),
+        title: Text(
+          widget.existingPngPath == null
+              ? 'Nouveau schéma'
+              : 'Modifier le schéma',
+        ),
         actions: [
+          // Outil Crayon
           IconButton(
-            icon: Icon(_erasing ? Icons.edit_outlined : Icons.auto_fix_normal),
-            tooltip: _erasing ? 'Repasser en dessin' : 'Gomme',
-            onPressed: () => setState(() => _erasing = !_erasing),
+            icon: Icon(
+              Icons.draw_outlined,
+              color: _currentTool == SketchTool.pen
+                  ? AppColors.accentTeal
+                  : AppColors.textMuted,
+            ),
+            tooltip: 'Tracé libre',
+            onPressed: () => setState(() => _currentTool = SketchTool.pen),
           ),
+          // Outil Texte Clavier
+          IconButton(
+            icon: Icon(
+              Icons.text_fields_outlined,
+              color: _currentTool == SketchTool.text
+                  ? AppColors.accentTeal
+                  : AppColors.textMuted,
+            ),
+            tooltip: 'Ajouter du texte au clavier',
+            onPressed: () => setState(() => _currentTool = SketchTool.text),
+          ),
+          // Outil Gomme
+          IconButton(
+            icon: Icon(
+              Icons.auto_fix_normal,
+              color: _currentTool == SketchTool.eraser
+                  ? AppColors.accentTeal
+                  : AppColors.textMuted,
+            ),
+            tooltip: 'Gomme',
+            onPressed: () => setState(() => _currentTool = SketchTool.eraser),
+          ),
+          // Annuler
           IconButton(
             icon: const Icon(Icons.undo),
-            tooltip: 'Annuler le dernier trait',
-            onPressed: _strokes.isEmpty ? null : _undo,
+            tooltip: 'Annuler',
+            onPressed: (_strokes.isEmpty && _labels.isEmpty) ? null : _undo,
           ),
+          // Tout effacer
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Tout effacer',
-            onPressed: _strokes.isEmpty ? null : _clear,
+            onPressed: (_strokes.isEmpty && _labels.isEmpty) ? null : _clear,
           ),
+          // Terminer / Sauvegarder
           _saving
               ? const Padding(
                   padding: EdgeInsets.all(16),
@@ -160,8 +307,8 @@ class _SketchScreenState extends State<SketchScreen> {
                   ),
                 )
               : IconButton(
-                  icon: const Icon(Icons.check),
-                  tooltip: 'Terminer',
+                  icon: const Icon(Icons.check, color: AppColors.accentTeal),
+                  tooltip: 'Valider le schéma',
                   onPressed: _finish,
                 ),
         ],
@@ -176,7 +323,10 @@ class _SketchScreenState extends State<SketchScreen> {
             onPanStart: _onPanStart,
             onPanUpdate: _onPanUpdate,
             child: CustomPaint(
-              painter: _SketchPainter(_strokes),
+              painter: _CombinedSketchPainter(
+                strokes: _strokes,
+                labels: _labels,
+              ),
               size: Size.infinite,
             ),
           ),
@@ -186,15 +336,18 @@ class _SketchScreenState extends State<SketchScreen> {
   }
 }
 
-class _SketchPainter extends CustomPainter {
+class _CombinedSketchPainter extends CustomPainter {
   final List<_SketchStroke> strokes;
-  _SketchPainter(this.strokes);
+  final List<_SketchLabel> labels;
+
+  _CombinedSketchPainter({required this.strokes, required this.labels});
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 1. Dessine les traits (crayon et gomme)
     for (final stroke in strokes) {
       final paint = Paint()
-        ..color = stroke.erase ? Colors.white : Colors.black
+        ..color = stroke.erase ? Colors.white : AppColors.inkDark
         ..strokeWidth = stroke.erase ? 24 : 3
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
@@ -202,8 +355,38 @@ class _SketchPainter extends CustomPainter {
         canvas.drawLine(stroke.points[i], stroke.points[i + 1], paint);
       }
     }
+
+    // 2. Dessine les étiquettes de texte tapées au clavier
+    for (final label in labels) {
+      final textSpan = TextSpan(
+        text: label.text,
+        style: const TextStyle(
+          color: AppColors.inkDark,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      // Dessine un petit fond blanc discret sous le texte pour la lisibilité
+      final bgRect = Rect.fromLTWH(
+        label.position.dx - 4,
+        label.position.dy - 2,
+        textPainter.width + 8,
+        textPainter.height + 4,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(bgRect, const Radius.circular(4)),
+        Paint()..color = Colors.white.withValues(alpha: 0.9),
+      );
+
+      textPainter.paint(canvas, label.position);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _SketchPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _CombinedSketchPainter oldDelegate) => true;
 }
