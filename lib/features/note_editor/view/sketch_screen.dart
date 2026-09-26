@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,9 @@ import 'package:universal_io/io.dart';
 import '../../../core/theme/app_theme.dart';
 
 enum SketchTool { pen, text, eraser }
+
+// Cache memoire pour la reedition des schemas sur navigateur Web
+final Map<String, String> _webSketchJsonStore = {};
 
 class _SketchStroke {
   final List<Offset> points;
@@ -54,7 +58,6 @@ class _SketchLabel {
       );
 
   Rect getBounds() {
-    // Estimation de la zone tactile de l'etiquette pour le deplacement
     final width = text.length * 9.5 + 24;
     return Rect.fromLTWH(position.dx - 8, position.dy - 8, width, 36);
   }
@@ -88,11 +91,13 @@ class _SketchScreenState extends State<SketchScreen> {
     final existing = widget.existingPngPath;
     _id = existing == null
         ? DateTime.now().microsecondsSinceEpoch.toString()
-        : existing
-            .split('/')
-            .last
-            .replaceFirst('sketch_', '')
-            .replaceFirst('.png', '');
+        : (existing.startsWith('data:')
+            ? DateTime.now().microsecondsSinceEpoch.toString()
+            : existing
+                .split('/')
+                .last
+                .replaceFirst('sketch_', '')
+                .replaceFirst('.png', ''));
     _loadExisting();
   }
 
@@ -100,10 +105,19 @@ class _SketchScreenState extends State<SketchScreen> {
     final existing = widget.existingPngPath;
     if (existing != null) {
       try {
-        final jsonPath = existing.replaceFirst('.png', '.json');
-        final file = File(jsonPath);
-        if (await file.exists()) {
-          final decoded = jsonDecode(await file.readAsString());
+        String? jsonRaw;
+        if (kIsWeb) {
+          jsonRaw = _webSketchJsonStore[_id];
+        } else {
+          final jsonPath = existing.replaceFirst('.png', '.json');
+          final file = File(jsonPath);
+          if (await file.exists()) {
+            jsonRaw = await file.readAsString();
+          }
+        }
+
+        if (jsonRaw != null) {
+          final decoded = jsonDecode(jsonRaw);
           if (decoded is List) {
             _strokes.addAll(
               decoded.map(
@@ -299,24 +313,43 @@ class _SketchScreenState extends State<SketchScreen> {
 
     setState(() => _saving = true);
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final jsonPath = '${dir.path}/sketch_$_id.json';
-      final pngPath = '${dir.path}/sketch_$_id.png';
+      final boundary = _boundaryKey.currentContext!.findRenderObject()
+          as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 2);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData!.buffer.asUint8List();
 
       final data = {
         'strokes': _strokes.map((s) => s.toJson()).toList(),
         'labels': _labels.map((l) => l.toJson()).toList(),
       };
-      await File(jsonPath).writeAsString(jsonEncode(data));
+      final jsonString = jsonEncode(data);
 
-      final boundary = _boundaryKey.currentContext!.findRenderObject()
-          as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      await File(pngPath).writeAsBytes(byteData!.buffer.asUint8List());
+      // 1. Cas Web : capture memoire binaire pure (aucune dependance fichier disque)
+      if (kIsWeb) {
+        _webSketchJsonStore[_id] = jsonString;
+        final base64Image = base64Encode(bytes);
+        final dataUrl = 'data:image/png;base64,$base64Image';
+        if (!mounted) return;
+        Navigator.of(context).pop(dataUrl);
+        return;
+      }
+
+      // 2. Cas Mobile : ecriture normale dans les documents locaux
+      final dir = await getApplicationDocumentsDirectory();
+      final jsonPath = '${dir.path}/sketch_$_id.json';
+      final pngPath = '${dir.path}/sketch_$_id.png';
+
+      await File(jsonPath).writeAsString(jsonString);
+      await File(pngPath).writeAsBytes(bytes);
 
       if (!mounted) return;
       Navigator.of(context).pop(pngPath);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur de validation du schéma : $e')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -436,7 +469,6 @@ class _CombinedSketchPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Dessine les traits (crayon et gomme)
     for (final stroke in strokes) {
       final paint = Paint()
         ..color = stroke.erase ? Colors.white : AppColors.inkDark
@@ -448,7 +480,6 @@ class _CombinedSketchPainter extends CustomPainter {
       }
     }
 
-    // 2. Dessine les etiquettes de texte
     for (final label in labels) {
       final textSpan = TextSpan(
         text: label.text,
@@ -470,14 +501,11 @@ class _CombinedSketchPainter extends CustomPainter {
         textPainter.height + 6,
       );
 
-      // Fond blanc doux sous le texte pour detacher du trace
       canvas.drawRRect(
         RRect.fromRectAndRadius(bgRect, const Radius.circular(6)),
         Paint()..color = Colors.white.withValues(alpha: 0.95),
       );
 
-      // Si l'utilisateur est en mode texte, on dessine une bordure fine
-      // pour indiquer visuellement que l'etiquette est saisissable et deplacable
       if (isTextMode) {
         canvas.drawRRect(
           RRect.fromRectAndRadius(bgRect, const Radius.circular(6)),

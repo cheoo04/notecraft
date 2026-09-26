@@ -11,6 +11,8 @@ import '../../../models/note.dart';
 import '../../settings/controller/settings_controller.dart';
 
 class NoteEditorState {
+  final String? existingNoteId;
+  final DateTime? existingCreatedAt;
   final String title;
   final String subject;
   final String content;
@@ -22,6 +24,8 @@ class NoteEditorState {
   final int recordingSeconds;
 
   const NoteEditorState({
+    this.existingNoteId,
+    this.existingCreatedAt,
     this.title = '',
     this.subject = 'Informatique',
     this.content = '',
@@ -46,6 +50,8 @@ class NoteEditorState {
   }
 
   NoteEditorState copyWith({
+    String? existingNoteId,
+    DateTime? existingCreatedAt,
     String? title,
     String? subject,
     String? content,
@@ -57,6 +63,8 @@ class NoteEditorState {
     int? recordingSeconds,
   }) {
     return NoteEditorState(
+      existingNoteId: existingNoteId ?? this.existingNoteId,
+      existingCreatedAt: existingCreatedAt ?? this.existingCreatedAt,
       title: title ?? this.title,
       subject: subject ?? this.subject,
       content: content ?? this.content,
@@ -85,6 +93,29 @@ class NoteEditorController extends Notifier<NoteEditorState> {
         ref.read(settingsControllerProvider).profile.favoriteSubject;
     return NoteEditorState(
       subject: defaultSubject.isNotEmpty ? defaultSubject : 'Général',
+    );
+  }
+
+  void initForNote(Note? note) {
+    if (note == null) {
+      final defaultSubject =
+          ref.read(settingsControllerProvider).profile.favoriteSubject;
+      state = NoteEditorState(
+        subject: defaultSubject.isNotEmpty ? defaultSubject : 'Général',
+      );
+      return;
+    }
+
+    state = NoteEditorState(
+      existingNoteId: note.id,
+      existingCreatedAt: note.createdAt,
+      title: note.title,
+      subject: note.subject,
+      content: note.rawText ?? '',
+      sketchPaths: note.rawSketchPaths,
+      imagePaths: note.imagePaths,
+      audioPaths: note.audioPaths,
+      audioDuration: note.audioDuration,
     );
   }
 
@@ -135,11 +166,9 @@ class NoteEditorController extends Notifier<NoteEditorState> {
       RecordConfig config;
 
       if (kIsWeb) {
-        // Sur le Web : codec Opus/WebM sans chemin physique
         config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000);
         filePath = '';
       } else {
-        // Sur Android/iOS : fichier m4a dans le stockage documents
         final dir = await getApplicationDocumentsDirectory();
         filePath =
             '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
@@ -173,8 +202,6 @@ class NoteEditorController extends Notifier<NoteEditorState> {
 
     try {
       final realPath = await _audioRecorder.stop();
-      // Sur le Web, realPath est une URL de type blob:http...
-      // Sur mobile, c'est le chemin du fichier local
       if (realPath != null && realPath.isNotEmpty) {
         state = state.copyWith(
           isRecording: false,
@@ -206,7 +233,7 @@ class NoteEditorController extends Notifier<NoteEditorState> {
   Note buildNote() {
     final now = DateTime.now();
     return Note(
-      id: now.microsecondsSinceEpoch.toString(),
+      id: state.existingNoteId ?? now.microsecondsSinceEpoch.toString(),
       title:
           state.title.trim().isEmpty ? 'Note sans titre' : state.title.trim(),
       subject: state.subject.trim().isEmpty ? 'Général' : state.subject.trim(),
@@ -214,7 +241,8 @@ class NoteEditorController extends Notifier<NoteEditorState> {
       rawSketchPaths: state.sketchPaths,
       imagePaths: state.imagePaths,
       audioPaths: state.audioPaths,
-      createdAt: now,
+      audioDuration: state.audioDuration,
+      createdAt: state.existingCreatedAt ?? now,
     );
   }
 }

@@ -1,7 +1,8 @@
 // lib/features/note_editor/view/note_editor_screen.dart
 
-import 'package:universal_io/io.dart';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,12 +10,16 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_platform_image.dart';
 import '../../../core/widgets/audio_player_card.dart';
+import '../../../models/note.dart';
 import '../../../services/storage_service.dart';
 import '../controller/note_editor_controller.dart';
 
 class NoteEditorScreen extends ConsumerStatefulWidget {
-  const NoteEditorScreen({super.key});
+  final Note? existingNote;
+
+  const NoteEditorScreen({super.key, this.existingNote});
 
   @override
   ConsumerState<NoteEditorScreen> createState() => _NoteEditorScreenState();
@@ -40,14 +45,20 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   @override
   void initState() {
     super.initState();
-    final initial = ref.read(noteEditorControllerProvider);
-    _titleController = TextEditingController(text: initial.title)
+    final note = widget.existingNote;
+
+    // Initialise le controleur avec la note existante si presente
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(noteEditorControllerProvider.notifier).initForNote(note);
+    });
+
+    _titleController = TextEditingController(text: note?.title ?? '')
       ..addListener(() {
         ref
             .read(noteEditorControllerProvider.notifier)
             .updateTitle(_titleController.text);
       });
-    _contentController = TextEditingController(text: initial.content)
+    _contentController = TextEditingController(text: note?.rawText ?? '')
       ..addListener(() {
         ref
             .read(noteEditorControllerProvider.notifier)
@@ -71,9 +82,14 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   }
 
   Future<void> _onEditSketch(String existingPath) async {
-    await context.push<String>('/note/sketch', extra: existingPath);
-    if (!mounted) return;
-    FileImage(File(existingPath)).evict();
+    final updated =
+        await context.push<String>('/note/sketch', extra: existingPath);
+    if (!mounted || updated == null) return;
+    if (!kIsWeb && !existingPath.startsWith('data:')) {
+      try {
+        FileImage(File(existingPath)).evict();
+      } catch (_) {}
+    }
     setState(() {});
   }
 
@@ -236,6 +252,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final editorState = ref.watch(noteEditorControllerProvider);
+    final isEditing = widget.existingNote != null;
 
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
@@ -249,9 +266,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Matière du cours',
-                style: TextStyle(
+              Text(
+                isEditing ? 'Modifier la note' : 'Matière du cours',
+                style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.textMuted,
                   fontWeight: FontWeight.w500,
@@ -286,9 +303,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 );
                 return TextButton.icon(
                   onPressed: (canProceed && !_saving) ? _onNext : null,
-                  label: const Text(
-                    'Suivant',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  label: Text(
+                    isEditing ? 'Enregistrer' : 'Suivant',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   icon: _saving
                       ? const SizedBox(
@@ -392,8 +409,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                                         color: AppColors.neutralBorder),
                                   ),
                                   clipBehavior: Clip.antiAlias,
-                                  child: Image.file(
-                                    File(path),
+                                  child: AppPlatformImage(
+                                    path: path,
+                                    width: 84,
+                                    height: 84,
                                     fit: BoxFit.contain,
                                   ),
                                 ),
@@ -461,8 +480,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                                       color: AppColors.neutralBorder),
                                 ),
                                 clipBehavior: Clip.antiAlias,
-                                child: Image.file(
-                                  File(path),
+                                child: AppPlatformImage(
+                                  path: path,
+                                  width: 84,
+                                  height: 84,
                                   fit: BoxFit.cover,
                                 ),
                               ),

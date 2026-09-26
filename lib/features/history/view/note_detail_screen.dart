@@ -1,7 +1,5 @@
 // lib/features/history/view/note_detail_screen.dart
 
-import 'package:universal_io/io.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date_format_helper.dart';
+import '../../../core/widgets/app_platform_image.dart';
 import '../../../core/widgets/audio_player_card.dart';
 import '../../../models/document.dart';
 import '../../../models/note.dart';
@@ -100,6 +99,15 @@ class NoteDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Détail de la note'),
         actions: [
+          // 1. Bouton Modifier la note (NOUVEAU)
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Modifier cette note',
+            onPressed: () {
+              context.push('/note/new', extra: note);
+            },
+          ),
+          // 2. Bouton Supprimer la note
           IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
             tooltip: 'Supprimer cette note',
@@ -113,7 +121,7 @@ class NoteDetailScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Carte Brouillon Source
+              // Carte Brouillon Source
               Material(
                 color: Colors.white,
                 shape: RoundedRectangleBorder(
@@ -220,18 +228,22 @@ class NoteDetailScreen extends ConsumerWidget {
                                 const SizedBox(width: 8),
                             itemBuilder: (context, index) {
                               final path = note.rawSketchPaths[index];
-                              return Container(
-                                width: 70,
-                                height: 70,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                      color: AppColors.neutralBorder),
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: Image.file(
-                                  File(path),
-                                  fit: BoxFit.cover,
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: AppColors.neutralBorder),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: AppPlatformImage(
+                                    path: path,
+                                    width: 70,
+                                    height: 70,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               );
                             },
@@ -239,7 +251,7 @@ class NoteDetailScreen extends ConsumerWidget {
                         ),
                       ],
 
-                      // Photos
+                      // Photos de cours
                       if (note.imagePaths.isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Row(
@@ -270,18 +282,22 @@ class NoteDetailScreen extends ConsumerWidget {
                                 const SizedBox(width: 8),
                             itemBuilder: (context, index) {
                               final path = note.imagePaths[index];
-                              return Container(
-                                width: 70,
-                                height: 70,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                      color: AppColors.neutralBorder),
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: Image.file(
-                                  File(path),
-                                  fit: BoxFit.cover,
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: AppColors.neutralBorder),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: AppPlatformImage(
+                                    path: path,
+                                    width: 70,
+                                    height: 70,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               );
                             },
@@ -289,7 +305,7 @@ class NoteDetailScreen extends ConsumerWidget {
                         ),
                       ],
 
-                      // Lecteurs pour tous les extraits audio enregistrés
+                      // Lecteurs audio
                       if (note.audioPaths.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         Row(
@@ -327,7 +343,7 @@ class NoteDetailScreen extends ConsumerWidget {
 
               const SizedBox(height: 24),
 
-              // 2. Section Documents générés
+              // Section Documents générés
               Text(
                 'Documents générés',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(

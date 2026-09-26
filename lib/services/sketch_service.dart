@@ -1,9 +1,11 @@
-import 'dart:convert';
-import 'dart:io';
+// lib/services/sketch_service.dart
 
+import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:universal_io/io.dart';
 
 import 'ai_service.dart';
 
@@ -14,11 +16,6 @@ class SketchResult {
 }
 
 abstract class SketchService {
-  /// Envoie le PNG d'un croquis (voir SketchScreen) au backend, qui le
-  /// reconstruit en SVG via un modèle vision. Sauvegarde le SVG reçu
-  /// localement et retourne son chemin, plus une description
-  /// structurée des relations (à injecter dans le prompt de
-  /// génération).
   Future<SketchResult> vectorize(String pngPath);
 }
 
@@ -29,8 +26,15 @@ class SketchServiceImpl implements SketchService {
 
   @override
   Future<SketchResult> vectorize(String pngPath) async {
-    final bytes = await File(pngPath).readAsBytes();
-    final imageBase64 = base64Encode(bytes);
+    String imageBase64;
+
+    // 1. Sur le Web ou en memoire Data-URL : pas d'appel disque
+    if (pngPath.startsWith('data:image')) {
+      imageBase64 = pngPath.split(',').last;
+    } else {
+      final bytes = await File(pngPath).readAsBytes();
+      imageBase64 = base64Encode(bytes);
+    }
 
     final response = await _dio.post(
       '/sketch/',
@@ -41,10 +45,12 @@ class SketchServiceImpl implements SketchService {
     final svg = data['svg'] as String;
     final description = data['description'] as String;
 
+    if (kIsWeb) {
+      // Sur le Web, on conserve directement la chaine SVG
+      return SketchResult(svgPath: svg, description: description);
+    }
+
     final dir = await getApplicationDocumentsDirectory();
-    // Même id que le PNG source (sketch_<id>.png -> sketch_<id>.svg),
-    // pour garder le lien visuel entre le croquis brut et sa version
-    // nettoyée sans avoir besoin d'un champ supplémentaire.
     final id = pngPath.split('/').last.replaceFirst('.png', '');
     final svgPath = '${dir.path}/sketch_$id.svg';
     await File(svgPath).writeAsString(svg);

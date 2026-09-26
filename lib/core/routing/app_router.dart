@@ -64,7 +64,8 @@ class AppRouter {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/note/new',
-        builder: (context, state) => const NoteEditorScreen(),
+        builder: (context, state) =>
+            NoteEditorScreen(existingNote: state.extra as Note?),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
