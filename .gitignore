@@ -48,3 +48,17 @@ app.*.map.json
 .widget_preview/
 .vercel
 .env*
+
+
+# Python & Environnements virtuels (ne jamais envoyer sur Git)
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+
+# Cles d'API et variables d'environnement secretes (TRES IMPORTANT)
+.env
+backend/.env
