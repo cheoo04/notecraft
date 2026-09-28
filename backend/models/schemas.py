@@ -55,3 +55,13 @@ class OcrRequest(BaseModel):
 
 class OcrResponse(BaseModel):
     extracted_text: str
+
+
+class ExtractDocumentRequest(BaseModel):
+    file_base64: str
+    filename: str
+
+
+class ExtractDocumentResponse(BaseModel):
+    extracted_text: str
+    suggested_title: str | None = None

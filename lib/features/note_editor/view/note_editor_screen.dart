@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_platform_image.dart';
 import '../../../core/widgets/audio_player_card.dart';
 import '../../../models/note.dart';
+import '../../../services/document_import_service.dart';
 import '../../../services/storage_service.dart';
 import '../controller/note_editor_controller.dart';
 
@@ -30,6 +31,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   late final TextEditingController _contentController;
   final ImagePicker _picker = ImagePicker();
   bool _saving = false;
+  bool _importing = false;
 
   final List<String> _availableSubjects = [
     'Physique',
@@ -47,7 +49,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     super.initState();
     final note = widget.existingNote;
 
-    // Initialise le controleur avec la note existante si presente
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(noteEditorControllerProvider.notifier).initForNote(note);
     });
@@ -110,6 +111,57 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _onImportDocument() async {
+    HapticFeedback.lightImpact();
+    setState(() => _importing = true);
+    try {
+      final service = ref.read(documentImportServiceProvider);
+      final result = await service.pickAndExtractDocument();
+      if (result == null) return;
+
+      if (result.text.trim().isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Le document sélectionné ne contient aucun texte exploitable.')),
+        );
+        return;
+      }
+
+      // Pré-remplissage automatique du titre s'il était vide
+      if (_titleController.text.trim().isEmpty &&
+          result.suggestedTitle != null) {
+        _titleController.text = result.suggestedTitle!;
+        ref
+            .read(noteEditorControllerProvider.notifier)
+            .updateTitle(result.suggestedTitle!);
+      }
+
+      // Concaténation propre dans le champ de contenu
+      final existingContent = _contentController.text.trim();
+      final newContent = existingContent.isEmpty
+          ? result.text
+          : '$existingContent\n\n--- Document importé ---\n${result.text}';
+
+      _contentController.text = newContent;
+      ref.read(noteEditorControllerProvider.notifier).updateContent(newContent);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Document importé et texte extrait avec succès !')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur lors de l\'import du document : $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _importing = false);
     }
   }
 
@@ -302,7 +354,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   noteEditorControllerProvider.select((s) => s.canProceed),
                 );
                 return TextButton.icon(
-                  onPressed: (canProceed && !_saving) ? _onNext : null,
+                  onPressed:
+                      (canProceed && !_saving && !_importing) ? _onNext : null,
                   label: Text(
                     isEditing ? 'Enregistrer' : 'Suivant',
                     style: const TextStyle(fontWeight: FontWeight.w700),
@@ -322,6 +375,11 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       ),
       body: Column(
         children: [
+          if (_importing)
+            const LinearProgressIndicator(
+              color: AppColors.accentTeal,
+              backgroundColor: AppColors.accentTealLight,
+            ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -352,7 +410,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     controller: _contentController,
                     decoration: const InputDecoration(
                       hintText:
-                          'Écris ta note ici (cours, concepts, formules)...',
+                          'Écris ta note ici ou importe un document (PDF, Word, TXT)...',
                       hintStyle: TextStyle(
                         fontSize: 14,
                         color: AppColors.textMuted,
@@ -521,7 +579,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ),
                   ],
 
-                  // Liste de tous les extraits audio enregistrés
+                  // Liste des extraits audio
                   if (editorState.audioPaths.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Row(
@@ -558,10 +616,13 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               ),
             ),
           ),
+
+          // Barre d'outils avec bouton d'import de document
           _BottomCaptureBar(
             isRecording: editorState.isRecording,
             onSketchTap: _onAddSketch,
             onCameraTap: _showPhotoSourceSheet,
+            onDocumentTap: _onImportDocument,
             onAudioTap: _onToggleAudio,
             onSubjectTap: _showSubjectPicker,
           ),
@@ -641,6 +702,7 @@ class _BottomCaptureBar extends StatelessWidget {
   final bool isRecording;
   final VoidCallback onSketchTap;
   final VoidCallback onCameraTap;
+  final VoidCallback onDocumentTap;
   final VoidCallback onAudioTap;
   final VoidCallback onSubjectTap;
 
@@ -648,6 +710,7 @@ class _BottomCaptureBar extends StatelessWidget {
     required this.isRecording,
     required this.onSketchTap,
     required this.onCameraTap,
+    required this.onDocumentTap,
     required this.onAudioTap,
     required this.onSubjectTap,
   });
@@ -666,8 +729,8 @@ class _BottomCaptureBar extends StatelessWidget {
         bottom: MediaQuery.of(context).padding.bottom > 0
             ? MediaQuery.of(context).padding.bottom
             : 10,
-        left: 20,
-        right: 20,
+        left: 16,
+        right: 16,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -683,6 +746,12 @@ class _BottomCaptureBar extends StatelessWidget {
             color: AppColors.accentTeal,
             tooltip: 'Photo de tableau / slide',
             onPressed: onCameraTap,
+          ),
+          IconButton(
+            icon: const Icon(Icons.upload_file_outlined),
+            color: AppColors.inkDark,
+            tooltip: 'Importer un document (PDF, Word, TXT)',
+            onPressed: onDocumentTap,
           ),
           Container(
             decoration: BoxDecoration(

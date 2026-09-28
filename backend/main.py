@@ -6,11 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-from routes import export, generate, notes, ocr, sketch, transcribe
+from routes import export, extract, generate, notes, ocr, sketch, transcribe
 
 app = FastAPI(title="NoteCraft API")
 
-# Middleware CORS indispensable pour le Web (sans aucun impact sur le mobile)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,6 +24,7 @@ app.include_router(export.router, prefix="/export", tags=["export"])
 app.include_router(sketch.router, prefix="/sketch", tags=["sketch"])
 app.include_router(transcribe.router, prefix="/transcribe", tags=["transcribe"])
 app.include_router(ocr.router, prefix="/ocr", tags=["ocr"])
+app.include_router(extract.router, prefix="/extract", tags=["extract"])
 
 
 @app.get("/health")
