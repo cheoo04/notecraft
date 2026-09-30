@@ -136,6 +136,17 @@ class NoteEditorController extends Notifier<NoteEditorState> {
     state = state.copyWith(sketchPaths: [...state.sketchPaths, path]);
   }
 
+  void updateSketch(String oldPath, String newPath) {
+    final index = state.sketchPaths.indexOf(oldPath);
+    if (index != -1) {
+      final updatedList = List<String>.from(state.sketchPaths);
+      updatedList[index] = newPath;
+      state = state.copyWith(sketchPaths: updatedList);
+    } else {
+      addSketch(newPath);
+    }
+  }
+
   void removeSketch(String path) {
     state = state.copyWith(
       sketchPaths: state.sketchPaths.where((p) => p != path).toList(),

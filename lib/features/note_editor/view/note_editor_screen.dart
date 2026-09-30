@@ -29,6 +29,7 @@ class NoteEditorScreen extends ConsumerStatefulWidget {
 class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
+  final FocusNode _contentFocus = FocusNode();
   final ImagePicker _picker = ImagePicker();
   bool _saving = false;
   bool _importing = false;
@@ -71,7 +72,27 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _contentFocus.dispose();
     super.dispose();
+  }
+
+  void _insertTab() {
+    final text = _contentController.text;
+    final selection = _contentController.selection;
+    const tabSpaces = '  '; // 2 espaces d'indentation standard informatique
+
+    if (!selection.isValid || selection.start < 0) {
+      _contentController.text = '$text$tabSpaces';
+      return;
+    }
+
+    final newText =
+        text.replaceRange(selection.start, selection.end, tabSpaces);
+    _contentController.value = TextEditingValue(
+      text: newText,
+      selection:
+          TextSelection.collapsed(offset: selection.start + tabSpaces.length),
+    );
   }
 
   Future<void> _onAddSketch() async {
@@ -86,6 +107,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     final updated =
         await context.push<String>('/note/sketch', extra: existingPath);
     if (!mounted || updated == null) return;
+    ref
+        .read(noteEditorControllerProvider.notifier)
+        .updateSketch(existingPath, updated);
     if (!kIsWeb && !existingPath.startsWith('data:')) {
       try {
         FileImage(File(existingPath)).evict();
@@ -132,7 +156,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         return;
       }
 
-      // Pré-remplissage automatique du titre s'il était vide
       if (_titleController.text.trim().isEmpty &&
           result.suggestedTitle != null) {
         _titleController.text = result.suggestedTitle!;
@@ -141,7 +164,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             .updateTitle(result.suggestedTitle!);
       }
 
-      // Concaténation propre dans le champ de contenu
       final existingContent = _contentController.text.trim();
       final newContent = existingContent.isEmpty
           ? result.text
@@ -152,13 +174,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Document importé et texte extrait avec succès !')),
+        const SnackBar(content: Text('Document importé avec succès !')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de l\'import du document : $e')),
+        SnackBar(content: Text('Erreur lors de l\'import : $e')),
       );
     } finally {
       if (mounted) setState(() => _importing = false);
@@ -406,26 +427,40 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   const Divider(color: AppColors.neutralBorder),
                   const SizedBox(height: 6),
 
-                  TextField(
-                    controller: _contentController,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Écris ta note ici ou importe un document (PDF, Word, TXT)...',
-                      hintStyle: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textMuted,
-                        height: 1.6,
+                  // Interception de la touche Tabulation pour indenter le code
+                  Focus(
+                    focusNode: _contentFocus,
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.tab) {
+                        _insertTab();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _contentController,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Écris ta note ici (cours, concepts, code, formules)...',
+                        hintStyle: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textMuted,
+                          height: 1.6,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
                       ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
+                      maxLines: null,
+                      minLines: 8,
+                      keyboardType: TextInputType.multiline,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            height: 1.5,
+                          ),
                     ),
-                    maxLines: null,
-                    minLines: 8,
-                    keyboardType: TextInputType.multiline,
-                    style: Theme.of(context).textTheme.bodyLarge,
                   ),
 
-                  // Carrousel des schémas dessinés
+                  // Carrousel des schémas dessinés avec réédition fonctionnelle
                   if (editorState.sketchPaths.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Row(
@@ -617,12 +652,13 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             ),
           ),
 
-          // Barre d'outils avec bouton d'import de document
+          // Barre d'outils avec bouton Tabulation
           _BottomCaptureBar(
             isRecording: editorState.isRecording,
             onSketchTap: _onAddSketch,
             onCameraTap: _showPhotoSourceSheet,
             onDocumentTap: _onImportDocument,
+            onTabTap: _insertTab,
             onAudioTap: _onToggleAudio,
             onSubjectTap: _showSubjectPicker,
           ),
@@ -703,6 +739,7 @@ class _BottomCaptureBar extends StatelessWidget {
   final VoidCallback onSketchTap;
   final VoidCallback onCameraTap;
   final VoidCallback onDocumentTap;
+  final VoidCallback onTabTap;
   final VoidCallback onAudioTap;
   final VoidCallback onSubjectTap;
 
@@ -711,6 +748,7 @@ class _BottomCaptureBar extends StatelessWidget {
     required this.onSketchTap,
     required this.onCameraTap,
     required this.onDocumentTap,
+    required this.onTabTap,
     required this.onAudioTap,
     required this.onSubjectTap,
   });
@@ -729,11 +767,11 @@ class _BottomCaptureBar extends StatelessWidget {
         bottom: MediaQuery.of(context).padding.bottom > 0
             ? MediaQuery.of(context).padding.bottom
             : 10,
-        left: 16,
-        right: 16,
+        left: 12,
+        right: 12,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           IconButton(
             icon: const Icon(Icons.draw_outlined),
@@ -752,6 +790,13 @@ class _BottomCaptureBar extends StatelessWidget {
             color: AppColors.inkDark,
             tooltip: 'Importer un document (PDF, Word, TXT)',
             onPressed: onDocumentTap,
+          ),
+          // Bouton Tabulation pour le code et les indentations
+          IconButton(
+            icon: const Icon(Icons.keyboard_tab_rounded),
+            color: AppColors.inkDark,
+            tooltip: 'Indenter (Tabulation)',
+            onPressed: onTabTap,
           ),
           Container(
             decoration: BoxDecoration(

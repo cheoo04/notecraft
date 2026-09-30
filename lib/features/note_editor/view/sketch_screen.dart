@@ -14,7 +14,7 @@ import '../../../core/theme/app_theme.dart';
 
 enum SketchTool { pen, text, eraser }
 
-// Cache memoire pour la reedition des schemas sur navigateur Web
+// Cache memoire indexe par chemin ou dataUrl pour recharger les traits
 final Map<String, String> _webSketchJsonStore = {};
 
 class _SketchStroke {
@@ -92,7 +92,7 @@ class _SketchScreenState extends State<SketchScreen> {
     _id = existing == null
         ? DateTime.now().microsecondsSinceEpoch.toString()
         : (existing.startsWith('data:')
-            ? DateTime.now().microsecondsSinceEpoch.toString()
+            ? 'sketch_${existing.hashCode.abs()}'
             : existing
                 .split('/')
                 .last
@@ -106,8 +106,9 @@ class _SketchScreenState extends State<SketchScreen> {
     if (existing != null) {
       try {
         String? jsonRaw;
-        if (kIsWeb) {
-          jsonRaw = _webSketchJsonStore[_id];
+        // Recherche dans le cache memoire (Web ou data-url)
+        if (kIsWeb || existing.startsWith('data:')) {
+          jsonRaw = _webSketchJsonStore[existing] ?? _webSketchJsonStore[_id];
         } else {
           final jsonPath = existing.replaceFirst('.png', '.json');
           final file = File(jsonPath);
@@ -325,17 +326,16 @@ class _SketchScreenState extends State<SketchScreen> {
       };
       final jsonString = jsonEncode(data);
 
-      // 1. Cas Web : capture memoire binaire pure (aucune dependance fichier disque)
       if (kIsWeb) {
-        _webSketchJsonStore[_id] = jsonString;
         final base64Image = base64Encode(bytes);
         final dataUrl = 'data:image/png;base64,$base64Image';
+        _webSketchJsonStore[dataUrl] = jsonString;
+        _webSketchJsonStore[_id] = jsonString;
         if (!mounted) return;
         Navigator.of(context).pop(dataUrl);
         return;
       }
 
-      // 2. Cas Mobile : ecriture normale dans les documents locaux
       final dir = await getApplicationDocumentsDirectory();
       final jsonPath = '${dir.path}/sketch_$_id.json';
       final pngPath = '${dir.path}/sketch_$_id.png';
