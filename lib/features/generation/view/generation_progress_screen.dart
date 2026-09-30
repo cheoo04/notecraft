@@ -1,20 +1,13 @@
 // lib/features/generation/view/generation_progress_screen.dart
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/document.dart';
-import '../../../services/ai_service.dart';
-import '../../../services/ocr_service.dart';
-import '../../../services/sketch_service.dart';
-import '../../../services/storage_service.dart';
-import '../../../services/transcription_service.dart';
+import '../controller/generation_pipeline_controller.dart';
 import '../generation_request_args.dart';
-
-enum StepStatus { pending, inProgress, completed }
 
 class GenerationProgressScreen extends ConsumerStatefulWidget {
   final GenerationRequestArgs? args;
@@ -28,150 +21,18 @@ class GenerationProgressScreen extends ConsumerStatefulWidget {
 
 class _GenerationProgressScreenState
     extends ConsumerState<GenerationProgressScreen> {
-  String? _error;
-  int _percentage = 15;
-
-  StepStatus _textStep = StepStatus.inProgress;
-  StepStatus _audioStep = StepStatus.pending;
-  StepStatus _sketchStep = StepStatus.pending;
-  StepStatus _layoutStep = StepStatus.pending;
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _executePipeline());
-  }
-
-  Future<void> _executePipeline() async {
-    final args = widget.args;
-    if (args == null) return;
-
-    try {
-      var note = args.note;
-      final svgPaths = <String>[];
-
-      // Etape 1 : Analyse du texte brut
-      await Future.delayed(const Duration(milliseconds: 400));
-      setState(() {
-        _textStep = StepStatus.completed;
-        _percentage = 25;
-      });
-
-      // Etape 1b : Extraction Vision OCR sur photos de tableau si presentes
-      if (note.imagePaths.isNotEmpty) {
-        final ocrService = ref.read(ocrServiceProvider);
-        final ocrResults = <String>[];
-        for (final imgPath in note.imagePaths) {
-          try {
-            final extracted = await ocrService.extractTextFromImage(imgPath);
-            if (extracted.trim().isNotEmpty) {
-              ocrResults.add(extracted.trim());
-            }
-          } catch (_) {}
-        }
-        if (ocrResults.isNotEmpty) {
-          final ocrSection =
-              '--- Contenu extrait des photos de tableau et diapositives ---\n${ocrResults.join('\n\n')}';
-          note = note.copyWith(
-            rawText: '${note.rawText ?? ''}\n\n$ocrSection',
-          );
-        }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pipeline = ref.read(generationPipelineControllerProvider);
+      // Demarre la generation seulement si elle n'est pas deja en cours
+      if (!pipeline.isRunning && widget.args != null) {
+        ref
+            .read(generationPipelineControllerProvider.notifier)
+            .runPipeline(widget.args!);
       }
-
-      // Etape 2 : Retranscription de tous les extraits audio Whisper dans l'ordre
-      if (note.audioPaths.isNotEmpty) {
-        setState(() => _audioStep = StepStatus.inProgress);
-        final transcriptionService = ref.read(transcriptionServiceProvider);
-        final audioTexts = <String>[];
-
-        for (int i = 0; i < note.audioPaths.length; i++) {
-          try {
-            final text =
-                await transcriptionService.transcribe(note.audioPaths[i]);
-            if (text.trim().isNotEmpty) {
-              audioTexts.add('Extrait ${i + 1} :\n$text');
-            }
-          } catch (_) {}
-        }
-
-        if (audioTexts.isNotEmpty) {
-          final audioSection =
-              '--- Retranscription des enregistrements oraux du cours ---\n${audioTexts.join('\n\n')}';
-          note = note.copyWith(
-            rawText: '${note.rawText ?? ''}\n\n$audioSection',
-          );
-        }
-
-        setState(() {
-          _audioStep = StepStatus.completed;
-          _percentage = 55;
-        });
-      }
-
-      // Etape 3 : Vectorisation des schemas joints
-      if (note.rawSketchPaths.isNotEmpty) {
-        setState(() => _sketchStep = StepStatus.inProgress);
-        final sketchService = ref.read(sketchServiceProvider);
-        final descriptions = <String>[];
-
-        for (final path in note.rawSketchPaths) {
-          try {
-            final result = await sketchService.vectorize(path);
-            svgPaths.add(result.svgPath);
-            descriptions.add(result.description);
-          } catch (_) {}
-        }
-
-        if (descriptions.isNotEmpty) {
-          final schemaSection =
-              '--- Schémas fournis avec la note ---\n${descriptions.join('\n\n')}';
-          note = note.copyWith(
-            rawText: '${note.rawText ?? ''}\n\n$schemaSection',
-          );
-        }
-
-        setState(() {
-          _sketchStep = StepStatus.completed;
-          _percentage = 75;
-        });
-      }
-
-      // Etape 4 : Redaction et mise en page finale
-      setState(() => _layoutStep = StepStatus.inProgress);
-      final aiService = ref.read(aiServiceProvider);
-      var document = await aiService.generate(
-        note: note,
-        format: args.format,
-        mode: args.mode,
-      );
-
-      if (svgPaths.isNotEmpty) {
-        document = document.copyWith(cleanedSketchSvgPaths: svgPaths);
-      }
-
-      setState(() {
-        _layoutStep = StepStatus.completed;
-        _percentage = 100;
-      });
-
-      try {
-        await ref.read(storageServiceProvider).saveDocument(document);
-      } catch (_) {}
-
-      await Future.delayed(const Duration(milliseconds: 400));
-      if (!mounted) return;
-      context.replace('/document/${document.id}', extra: document);
-    } catch (e) {
-      if (!mounted) return;
-      String message = e.toString();
-      if (e is DioException && e.response?.data != null) {
-        final data = e.response!.data;
-        if (data is Map && data.containsKey('detail')) {
-          message = data['detail'].toString();
-        }
-      }
-      setState(() => _error = message);
-    }
+    });
   }
 
   @override
@@ -180,7 +41,23 @@ class _GenerationProgressScreenState
       return const Scaffold(body: Center(child: Text('Aucune requête reçue')));
     }
 
+    final pipelineState = ref.watch(generationPipelineControllerProvider);
     final isAffine = widget.args!.mode == GenerationMode.affine;
+
+    // Redirection automatique des que le document est pret
+    ref.listen(generationPipelineControllerProvider, (previous, next) {
+      if (next.currentStep == PipelineStep.completed &&
+          next.resultDocument != null) {
+        context.replace(
+          '/document/${next.resultDocument!.id}',
+          extra: next.resultDocument,
+        );
+      }
+    });
+
+    final hasAudio = widget.args!.note.audioPaths.isNotEmpty;
+    final hasSketch = widget.args!.note.rawSketchPaths.isNotEmpty;
+    final hasImages = widget.args!.note.imagePaths.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.canvasGrey,
@@ -191,7 +68,8 @@ class _GenerationProgressScreenState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (_error == null) ...[
+                if (pipelineState.error == null) ...[
+                  // Jauge circulaire avec pourcentage
                   Stack(
                     alignment: Alignment.center,
                     children: [
@@ -199,14 +77,14 @@ class _GenerationProgressScreenState
                         width: 120,
                         height: 120,
                         child: CircularProgressIndicator(
-                          value: _percentage / 100.0,
+                          value: pipelineState.percentage / 100.0,
                           strokeWidth: 8,
                           backgroundColor: AppColors.neutralBorder,
                           color: AppColors.accentTeal,
                         ),
                       ),
                       Text(
-                        '$_percentage%',
+                        '${pipelineState.percentage}%',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w800,
@@ -216,6 +94,7 @@ class _GenerationProgressScreenState
                     ],
                   ),
                   const SizedBox(height: 24),
+
                   Text(
                     isAffine
                         ? 'Analyse Affinée en cours...'
@@ -228,7 +107,7 @@ class _GenerationProgressScreenState
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Nettoyage des schémas, analyse OCR & structuration',
+                    'Nettoyage des schémas, analyse vocale & structuration',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
@@ -236,6 +115,8 @@ class _GenerationProgressScreenState
                     ),
                   ),
                   const SizedBox(height: 32),
+
+                  // Liste d'etapes animees
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -246,37 +127,58 @@ class _GenerationProgressScreenState
                     child: Column(
                       children: [
                         _ProgressStepItem(
-                          label: widget.args!.note.imagePaths.isNotEmpty
+                          label: hasImages
                               ? 'Texte brut & photos de tableau analysés'
                               : 'Traitement du texte brut',
-                          status: _textStep,
+                          isDone: pipelineState.percentage >= 30,
+                          isInProgress: pipelineState.percentage < 30,
                         ),
                         const Divider(height: 18),
                         _ProgressStepItem(
-                          label: widget.args!.note.audioPaths.isNotEmpty
+                          label: hasAudio
                               ? 'Enregistrements vocaux analysés (${widget.args!.note.audioPaths.length})'
                               : 'Contenu audio vérifié',
-                          status: _audioStep,
+                          isDone: pipelineState.percentage >= 65,
+                          isInProgress:
+                              pipelineState.currentStep == PipelineStep.audio,
                         ),
                         const Divider(height: 18),
                         _ProgressStepItem(
-                          label: widget.args!.note.rawSketchPaths.isNotEmpty
+                          label: hasSketch
                               ? 'Vectorisation des schémas joints'
                               : 'Vérification des éléments graphiques',
-                          status: _sketchStep,
+                          isDone: pipelineState.percentage >= 85,
+                          isInProgress:
+                              pipelineState.currentStep == PipelineStep.sketch,
                         ),
                         const Divider(height: 18),
                         _ProgressStepItem(
                           label: 'Rédaction et mise en page finale',
-                          status: _layoutStep,
+                          isDone: pipelineState.percentage == 100,
+                          isInProgress:
+                              pipelineState.currentStep == PipelineStep.layout,
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 32),
-                  TextButton(
-                    onPressed: () => context.pop(),
-                    child: const Text(
+
+                  // VRAI BOUTON ARRIERE-PLAN FONCTIONNEL
+                  TextButton.icon(
+                    icon: const Icon(Icons.arrow_back,
+                        size: 16, color: AppColors.textMuted),
+                    onPressed: () {
+                      context.pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Génération en cours en arrière-plan. Le document apparaîtra dans votre historique dès qu\'il sera prêt.',
+                          ),
+                          duration: Duration(seconds: 4),
+                        ),
+                      );
+                    },
+                    label: const Text(
                       'Passer en arrière-plan',
                       style: TextStyle(
                         color: AppColors.textMuted,
@@ -290,7 +192,7 @@ class _GenerationProgressScreenState
                       color: Colors.redAccent, size: 48),
                   const SizedBox(height: 16),
                   Text(
-                    'Erreur : $_error',
+                    'Erreur : ${pipelineState.error}',
                     textAlign: TextAlign.center,
                     style:
                         const TextStyle(color: Colors.redAccent, fontSize: 13),
@@ -298,15 +200,9 @@ class _GenerationProgressScreenState
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () {
-                      setState(() {
-                        _error = null;
-                        _percentage = 15;
-                        _textStep = StepStatus.inProgress;
-                        _audioStep = StepStatus.pending;
-                        _sketchStep = StepStatus.pending;
-                        _layoutStep = StepStatus.pending;
-                      });
-                      _executePipeline();
+                      ref
+                          .read(generationPipelineControllerProvider.notifier)
+                          .runPipeline(widget.args!);
                     },
                     child: const Text('Réessayer'),
                   ),
@@ -322,20 +218,22 @@ class _GenerationProgressScreenState
 
 class _ProgressStepItem extends StatelessWidget {
   final String label;
-  final StepStatus status;
+  final bool isDone;
+  final bool isInProgress;
 
   const _ProgressStepItem({
     required this.label,
-    required this.status,
+    required this.isDone,
+    required this.isInProgress,
   });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        if (status == StepStatus.completed)
+        if (isDone)
           const Icon(Icons.check_circle, color: AppColors.accentTeal, size: 20)
-        else if (status == StepStatus.inProgress)
+        else if (isInProgress)
           const SizedBox(
             width: 20,
             height: 20,
@@ -352,12 +250,10 @@ class _ProgressStepItem extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 13,
-              fontWeight: status == StepStatus.inProgress
-                  ? FontWeight.w700
-                  : FontWeight.w500,
-              color: status == StepStatus.pending
-                  ? AppColors.textMuted
-                  : AppColors.inkDark,
+              fontWeight: isInProgress ? FontWeight.w700 : FontWeight.w500,
+              color: isDone || isInProgress
+                  ? AppColors.inkDark
+                  : AppColors.textMuted,
             ),
           ),
         ),
