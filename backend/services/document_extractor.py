@@ -1,14 +1,13 @@
 # backend/services/document_extractor.py
 
-"""
-Service d'extraction de texte a partir de documents de cours
-Supporte : PDF (.pdf), Word (.docx), Texte (.txt), Markdown (.md).
-"""
-
 import io
 import xml.etree.ElementTree as ET
 import zipfile
-from pypdf import PdfReader
+
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
 
 
 def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
@@ -18,7 +17,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
     if lower_name.endswith((".txt", ".md")):
         return file_bytes.decode("utf-8", errors="replace").strip()
 
-    # 2. Documents Word (.docx) : extraction XML native sans dependance lourde
+    # 2. Documents Word (.docx)
     if lower_name.endswith(".docx"):
         try:
             with zipfile.ZipFile(io.BytesIO(file_bytes)) as docx_zip:
@@ -35,6 +34,8 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
 
     # 3. Documents PDF (.pdf)
     if lower_name.endswith(".pdf"):
+        if PdfReader is None:
+            raise ValueError("Le module pypdf n'est pas installe sur le serveur.")
         try:
             reader = PdfReader(io.BytesIO(file_bytes))
             pages_text = []

@@ -10,10 +10,11 @@ from routes import export, extract, generate, notes, ocr, sketch, transcribe
 
 app = FastAPI(title="NoteCraft API")
 
+# Configuration CORS 100% conforme aux specifications navigateur
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
