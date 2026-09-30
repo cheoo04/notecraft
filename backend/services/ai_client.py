@@ -8,7 +8,6 @@ from .prompts.style_guide import STYLE_GUIDE
 
 logger = logging.getLogger("notecraft.ai")
 
-# Modeles candidats testes en cascade sur Groq
 CANDIDATE_MODELS_EXPRESS = [
     os.environ.get("GROQ_MODEL_EXPRESS"),
     "openai/gpt-oss-20b",
@@ -44,13 +43,37 @@ def _get_gemini_client() -> OpenAI | None:
     )
 
 
-def _call_provider(client: OpenAI, model: str, prompt: str, max_tokens: int) -> str:
-    response = client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.choices[0].message.content or ""
+def _call_provider_with_continuation(client: OpenAI, model: str, prompt: str, max_tokens: int) -> str:
+    """
+    Appelle le modele et si la reponse est tronquee par la limite de tokens
+    (finish_reason == 'length'), demande automatiquement la suite et fusionne.
+    """
+    messages = [{"role": "user", "content": prompt}]
+    content_chunks = []
+
+    for _ in range(2):
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=messages,
+        )
+        choice = response.choices[0]
+        chunk = choice.message.content or ""
+        content_chunks.append(chunk)
+
+        # Si le modele a fini naturellement, on s'arrete
+        if choice.finish_reason != "length":
+            break
+
+        # S'il a ete coupe en plein vol, on lui demande de finir
+        logger.info(f"Document tronque sur {model}, demande de continuation automatique...")
+        messages.append({"role": "assistant", "content": chunk})
+        messages.append({
+            "role": "user",
+            "content": "Continue la redaction exactement la ou tu t'es arrete, sans repeter ce qui precede et en menant le document jusqu'a sa conclusion complete."
+        })
+
+    return "".join(content_chunks)
 
 
 def _call_anthropic(prompt: str, max_tokens: int) -> str:
@@ -71,10 +94,10 @@ def _call_anthropic(prompt: str, max_tokens: int) -> str:
     )
 
 
-def execute_with_fallback(prompt: str, max_tokens: int = 2500, is_affine: bool = False) -> str:
+def execute_with_fallback(prompt: str, max_tokens: int = 3000, is_affine: bool = False) -> str:
     errors: list[str] = []
 
-    # 1. Tentative Groq avec boucle de repli sur modeles candidats
+    # 1. Tentative Groq avec boucle de repli et auto-continuation
     groq_client = _get_groq_client()
     if groq_client:
         candidate_models = CANDIDATE_MODELS_AFFINE if is_affine else CANDIDATE_MODELS_EXPRESS
@@ -82,7 +105,7 @@ def execute_with_fallback(prompt: str, max_tokens: int = 2500, is_affine: bool =
             if not model:
                 continue
             try:
-                return _call_provider(groq_client, model, prompt, max_tokens)
+                return _call_provider_with_continuation(groq_client, model, prompt, max_tokens)
             except Exception as e:
                 err = f"Groq ({model}) : {e}"
                 logger.warning(err)
@@ -93,13 +116,13 @@ def execute_with_fallback(prompt: str, max_tokens: int = 2500, is_affine: bool =
     if gemini_client:
         gemini_model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
         try:
-            return _call_provider(gemini_client, gemini_model, prompt, max_tokens)
+            return _call_provider_with_continuation(gemini_client, gemini_model, prompt, max_tokens)
         except Exception as e:
             err = f"Gemini ({gemini_model}) : {e}"
             logger.warning(err)
             errors.append(err)
 
-    # 3. Fallback Anthropic si cle renseignee
+    # 3. Fallback Anthropic
     if os.environ.get("ANTHROPIC_API_KEY"):
         try:
             return _call_anthropic(prompt, max_tokens)
@@ -158,7 +181,8 @@ Extrait :
 def generate(prompt: str, mode: str, is_long_document: bool = False) -> str:
     is_affine = mode == "affine"
 
-    token_limit = 4500 if is_long_document else 2500
+    # Plafond de 7000 tokens pour les rapports et documents massifs
+    token_limit = 7000 if is_long_document else 3000
 
     if not is_affine:
         return execute_with_fallback(prompt, max_tokens=token_limit, is_affine=False)
@@ -170,7 +194,7 @@ Voici un premier brouillon de document d'etude.
 Relis-le et supprime tout ce qui pourrait trahir un style d'IA generique :
 - Conserve l'INTEGRALITE des explications, formules, exemples et sections sans les raccourcir.
 - Remplace tout tiret cadratin ou demi-cadratin residuel par deux-points, virgules ou parentheses.
-- Assure-toi de la densite technique et de la precision du vocabulaire.
+- Assure-toi que la conclusion et les recommandations sont menees a leur terme complet.
 
 {STYLE_GUIDE}
 
