@@ -29,10 +29,20 @@ class NoteEditorScreen extends ConsumerStatefulWidget {
 class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
-  final FocusNode _contentFocus = FocusNode();
   final ImagePicker _picker = ImagePicker();
   bool _saving = false;
   bool _importing = false;
+
+  // Intercepteur de touche physique Tabulation directement attache au TextField
+  late final FocusNode _contentFocus = FocusNode(
+    onKeyEvent: (node, event) {
+      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.tab) {
+        _insertTab();
+        return KeyEventResult.handled; // Bloque le changement de bouton
+      }
+      return KeyEventResult.ignored;
+    },
+  );
 
   final List<String> _availableSubjects = [
     'Physique',
@@ -79,10 +89,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   void _insertTab() {
     final text = _contentController.text;
     final selection = _contentController.selection;
-    const tabSpaces = '  '; // 2 espaces d'indentation standard informatique
+    const tabSpaces = '  '; // 2 espaces d'indentation standard code et puces
 
     if (!selection.isValid || selection.start < 0) {
-      _contentController.text = '$text$tabSpaces';
+      final newText = '$text$tabSpaces';
+      _contentController.text = newText;
+      ref.read(noteEditorControllerProvider.notifier).updateContent(newText);
       return;
     }
 
@@ -93,6 +105,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       selection:
           TextSelection.collapsed(offset: selection.start + tabSpaces.length),
     );
+    ref.read(noteEditorControllerProvider.notifier).updateContent(newText);
   }
 
   Future<void> _onAddSketch() async {
@@ -427,40 +440,30 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   const Divider(color: AppColors.neutralBorder),
                   const SizedBox(height: 6),
 
-                  // Interception de la touche Tabulation pour indenter le code
-                  Focus(
+                  // TextField avec FocusNode direct : intercepte Tab pour indenter sans fuiter sur les boutons
+                  TextField(
+                    controller: _contentController,
                     focusNode: _contentFocus,
-                    onKeyEvent: (node, event) {
-                      if (event is KeyDownEvent &&
-                          event.logicalKey == LogicalKeyboardKey.tab) {
-                        _insertTab();
-                        return KeyEventResult.handled;
-                      }
-                      return KeyEventResult.ignored;
-                    },
-                    child: TextField(
-                      controller: _contentController,
-                      decoration: const InputDecoration(
-                        hintText:
-                            'Écris ta note ici (cours, concepts, code, formules)...',
-                        hintStyle: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textMuted,
-                          height: 1.6,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'Écris ta note ici (cours, concepts, code, formules)...',
+                      hintStyle: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textMuted,
+                        height: 1.6,
                       ),
-                      maxLines: null,
-                      minLines: 8,
-                      keyboardType: TextInputType.multiline,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            height: 1.5,
-                          ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
                     ),
+                    maxLines: null,
+                    minLines: 8,
+                    keyboardType: TextInputType.multiline,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          height: 1.5,
+                        ),
                   ),
 
-                  // Carrousel des schémas dessinés avec réédition fonctionnelle
+                  // Carrousel des schémas dessinés
                   if (editorState.sketchPaths.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Row(
@@ -791,7 +794,6 @@ class _BottomCaptureBar extends StatelessWidget {
             tooltip: 'Importer un document (PDF, Word, TXT)',
             onPressed: onDocumentTap,
           ),
-          // Bouton Tabulation pour le code et les indentations
           IconButton(
             icon: const Icon(Icons.keyboard_tab_rounded),
             color: AppColors.inkDark,
